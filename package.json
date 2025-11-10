@@ -1,0 +1,20 @@
+{
+  "name": "emilys-dashboard",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "generate": "node scripts/generate-dashboard.js"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.11",
+    "openai": "^4.36.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vite": "^5.2.8"
+  }
+}

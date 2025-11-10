@@ -1,0 +1,37 @@
+{
+  "clientName": "Maria",
+  "weekLabel": "tracked meals",
+  "startDate": "2024-07-01",
+  "generateImages": true,
+  "days": [
+    {
+      "label": "Day 1",
+      "meals": [
+        {
+          "id": "day1-breakfast",
+          "title": "Fruit plate",
+          "source": {
+            "type": "text",
+            "value": "Strawberries, blueberries, diced mango, and banana slices with a cup of plain yogurt."
+          }
+        },
+        {
+          "id": "day1-lunch",
+          "title": "Tomato soup",
+          "source": {
+            "type": "text",
+            "value": "Homemade tomato soup with grilled cheese on whole wheat bread, side of cucumber sticks."
+          }
+        },
+        {
+          "id": "day1-snack",
+          "title": "Yogurt parfait",
+          "source": {
+            "type": "text",
+            "value": "Greek yogurt topped with granola, honey drizzle, and sliced kiwi."
+          }
+        }
+      ]
+    }
+  ]
+}

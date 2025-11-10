@@ -1,0 +1,6 @@
+node_modules
+dist
+.DS_Store
+public/data/dashboard-data.json
+public/generated/*
+!public/generated/.gitkeep
