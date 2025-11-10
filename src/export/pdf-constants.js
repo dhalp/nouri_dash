@@ -23,6 +23,9 @@ const CARD_TARGET_HEIGHT_PT = 138;
 const CARD_MIN_HEIGHT_PT = 104;
 const CARD_IMAGE_RATIO = 0.46;
 const TITLE_ACCENT_HEX = '#f48a1f';
+const CARD_EXPORT_WIDTH_IN = 10;
+const CARD_EXPORT_HEIGHT_IN = 6.25;
+const CARD_EXPORT_PADDING_IN = 0.35;
 
 const CATEGORY_ORDER = [
   { key: 'vegFruit', label: 'Always Food', emoji: '🥦' },
@@ -82,6 +85,9 @@ export {
   CARD_MIN_HEIGHT_PT,
   CARD_IMAGE_RATIO,
   TITLE_ACCENT_HEX,
+  CARD_EXPORT_WIDTH_IN,
+  CARD_EXPORT_HEIGHT_IN,
+  CARD_EXPORT_PADDING_IN,
   CATEGORY_ORDER,
   DEFAULT_PALETTE,
   inchesToPoints,

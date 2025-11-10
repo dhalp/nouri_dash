@@ -91,6 +91,8 @@ Open `http://localhost:5173`. The page replicates the layout from `img_456`, inc
 
 Use **Print Layout** whenever you need a quick browser-to-PDF export. That button swaps the app into a full-bleed, button-free view sized for letter landscape pages, automatically hides overlays, and labels empty tiles as “meal not provided.” Once in that mode press Cmd+P/Ctrl+P and print/save at 100%—no manual 75% scaling required. (If you forget to hit the button first, the page still auto-snapshots into the same layout during `beforeprint`.)
 
+Need just a quick shareable card? While you’re in Print Layout, click the floating helper bubble to capture the current board as a fixed 10" × 6.25" PDF card. The app renders the on-screen layout to an image, centers it on the card canvas, and downloads it instantly—perfect for email or social updates.
+
 The **Export PDF** button is still available when you want the deterministic vector composer: it generates a PDF explicitly composed for 11" × 8.5" landscape pages, keeps text selectable, and hardcodes margins so you can send the file straight to a printer. **Download JSON** still pulls the current dataset (including in-browser runs from the wizard).
 
 ### Validate the export layout

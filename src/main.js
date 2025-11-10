@@ -1,4 +1,6 @@
+import { toPng } from 'html-to-image';
 import { MEAL_BREAKDOWN_PROMPT, PICTURE_GENERATION_PROMPT } from '../scripts/prompts.js';
+import { renderCardSnapshotPdf } from './export/card-composer.js';
 import { renderDashboardPdf } from './export/pdf-composer.js';
 import './style.css';
 
@@ -37,6 +39,25 @@ const VIEW_MODES = {
   print: 'print'
 };
 
+const PRINT_HINT_COPY = {
+  idle: {
+    title: 'Print layout ready.',
+    body: 'Click to save this exact view as a 10" × 6.25" PDF card, or press Cmd+P/Ctrl+P to open the system print dialog.'
+  },
+  busy: {
+    title: 'Exporting card…',
+    body: 'Hold tight while we capture this layout at high resolution.'
+  },
+  success: {
+    title: 'Card saved.',
+    body: 'Check your downloads for the PDF. Click again if you need a refreshed capture.'
+  },
+  error: {
+    title: 'Export failed.',
+    body: 'Please try again after the page finishes loading or images resolve.'
+  }
+};
+
 const mealBreakdownSchema = {
   name: 'meal_breakdown',
   schema: {
@@ -70,7 +91,8 @@ const appState = {
   apiKeyDraft: '',
   apiKeyStatus: { type: 'idle', message: '' },
   isApiKeyVisible: false,
-  viewMode: VIEW_MODES.interactive
+  viewMode: VIEW_MODES.interactive,
+  isPrintCardExporting: false
 };
 
 const exportPreviewState = {
@@ -85,8 +107,13 @@ const exportPreviewState = {
 
 const uploaderOverlay = createUploaderOverlay();
 const exportPreviewOverlay = createExportPreviewOverlay();
+let printModeHintTitleEl = null;
+let printModeHintBodyEl = null;
+let printModeHintResetTimer = null;
+let currentPrintHintState = 'idle';
 const printModeHint = createPrintModeHint();
 let printModeForcedByBrowser = false;
+setPrintModeHintState('idle');
 
 function getTileKey(dayIndex, slotIndex) {
   return `${dayIndex}:${slotIndex}`;
@@ -239,40 +266,149 @@ function createExportPreviewOverlay() {
 }
 
 function createPrintModeHint() {
+  if (typeof document === 'undefined') return null;
   const hint = document.createElement('div');
   hint.className = 'print-mode-hint';
-  hint.innerHTML =
-    '<strong>Print layout ready.</strong> Press Cmd+P (Mac) or Ctrl+P (Windows) to open the print dialog, then save as PDF. Press Esc to return to the interactive view.';
+  hint.setAttribute('role', 'button');
+  hint.setAttribute('aria-hidden', 'true');
+  hint.tabIndex = 0;
+
+  const title = document.createElement('strong');
+  title.className = 'print-mode-hint__title';
+  const body = document.createElement('span');
+  body.className = 'print-mode-hint__body';
+  hint.append(title, body);
+  printModeHintTitleEl = title;
+  printModeHintBodyEl = body;
+  title.textContent = PRINT_HINT_COPY.idle.title;
+  body.textContent = PRINT_HINT_COPY.idle.body;
+
+  hint.addEventListener('click', handlePrintHintActivation);
+  hint.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handlePrintHintActivation();
+    }
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && appState.viewMode === VIEW_MODES.print) {
       event.preventDefault();
       exitPrintMode();
     }
   });
-  window.addEventListener('beforeprint', () => {
-    if (appState.viewMode !== VIEW_MODES.print) {
-      printModeForcedByBrowser = true;
-      enterPrintMode({ silent: true });
-    }
-  });
-  window.addEventListener('afterprint', () => {
-    if (printModeForcedByBrowser) {
-      printModeForcedByBrowser = false;
-      exitPrintMode();
-    }
-  });
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeprint', () => {
+      if (appState.viewMode !== VIEW_MODES.print) {
+        printModeForcedByBrowser = true;
+        enterPrintMode({ silent: true });
+      }
+    });
+    window.addEventListener('afterprint', () => {
+      if (printModeForcedByBrowser) {
+        printModeForcedByBrowser = false;
+        exitPrintMode();
+      }
+    });
+  }
   document.body.appendChild(hint);
   return hint;
 }
 
 function updatePrintModeHint(isPrintMode) {
   if (!printModeHint) return;
-  printModeHint.classList.toggle('is-visible', Boolean(isPrintMode));
+  const visible = Boolean(isPrintMode);
+  printModeHint.classList.toggle('is-visible', visible);
+  printModeHint.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (!visible) {
+    setPrintModeHintState('idle');
+  }
+}
+
+function setPrintModeHintState(state) {
+  if (!printModeHint) return;
+  const nextState = PRINT_HINT_COPY[state] ? state : 'idle';
+  const copy = PRINT_HINT_COPY[nextState];
+  currentPrintHintState = nextState;
+  if (printModeHintTitleEl) {
+    printModeHintTitleEl.textContent = copy.title;
+  }
+  if (printModeHintBodyEl) {
+    printModeHintBodyEl.textContent = copy.body;
+  }
+  printModeHint.classList.toggle('is-busy', nextState === 'busy');
+  if (printModeHintResetTimer) {
+    clearTimeout(printModeHintResetTimer);
+    printModeHintResetTimer = null;
+  }
+  if (nextState === 'success' || nextState === 'error') {
+    printModeHintResetTimer = setTimeout(() => {
+      printModeHintResetTimer = null;
+      if (appState.viewMode === VIEW_MODES.print) {
+        setPrintModeHintState('idle');
+      }
+    }, 4500);
+  }
+}
+
+function handlePrintHintActivation(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (appState.viewMode !== VIEW_MODES.print) return;
+  if (appState.isPrintCardExporting || currentPrintHintState === 'busy') return;
+  exportPrintLayoutCard();
+}
+
+async function exportPrintLayoutCard() {
+  const canvas = document.querySelector('.dashboard-canvas');
+  if (!canvas) {
+    setPrintModeHintState('error');
+    alert('Switch to Print Layout before exporting this card view.');
+    return;
+  }
+
+  appState.isPrintCardExporting = true;
+  setPrintModeHintState('busy');
+
+  try {
+    const imageDataUrl = await capturePrintLayoutImage(canvas);
+    const { blob } = await renderCardSnapshotPdf(imageDataUrl);
+    await triggerBlobDownload(blob, buildPrintCardFilename());
+    setPrintModeHintState('success');
+  } catch (error) {
+    console.error('Print card export failed', error);
+    setPrintModeHintState('error');
+    alert(`Unable to export this view: ${error.message}`);
+  } finally {
+    appState.isPrintCardExporting = false;
+  }
+}
+
+async function capturePrintLayoutImage(node) {
+  const rect = node.getBoundingClientRect();
+  const width = Math.max(Math.ceil(rect.width), node.scrollWidth || 0, node.offsetWidth || 0) || 1;
+  const height = Math.max(Math.ceil(rect.height), node.scrollHeight || 0, node.offsetHeight || 0) || 1;
+  const deviceRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const pixelRatio = Math.min(3, Math.max(1.5, deviceRatio * 1.25));
+  return toPng(node, {
+    cacheBust: true,
+    pixelRatio,
+    width,
+    height,
+    backgroundColor: '#ffffff',
+    style: {
+      transform: 'scale(1)',
+      transformOrigin: 'top left'
+    }
+  });
 }
 
 function enterPrintMode({ silent = false } = {}) {
   if (appState.viewMode === VIEW_MODES.print) return;
   appState.viewMode = VIEW_MODES.print;
+  setPrintModeHintState('idle');
   renderDashboard();
   if (!silent) {
     requestAnimationFrame(() => {
@@ -284,6 +420,7 @@ function enterPrintMode({ silent = false } = {}) {
 function exitPrintMode() {
   if (appState.viewMode !== VIEW_MODES.print) return;
   appState.viewMode = VIEW_MODES.interactive;
+  setPrintModeHintState('idle');
   renderDashboard();
 }
 
@@ -487,6 +624,11 @@ function ensurePdfExtension(name) {
 function buildExportFilename() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   return `tracked-meals-${timestamp}.pdf`;
+}
+
+function buildPrintCardFilename() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `print-card-${timestamp}.pdf`;
 }
 
 async function handleExportSave(preferPicker = false) {
@@ -1210,7 +1352,6 @@ function renderDashboard() {
   const canvas = el('div', { className: 'dashboard-canvas' });
   const header = el('header', { className: 'dashboard-header' });
 
-  const infoGroup = el('div', { className: 'dashboard-header__info' });
   const titleBlock = el('div', { className: 'dashboard-title' }, [
     el('span', { className: 'dashboard-title__client', text: clientTitle }),
     el('span', { className: 'dashboard-title__label', text: weekLabel })
@@ -1236,7 +1377,9 @@ function renderDashboard() {
   };
 
   const legend = createLegend(effectivePalette);
-  infoGroup.append(titleBlock, legend);
+  const headerTop = el('div', { className: 'dashboard-header__top' });
+  headerTop.append(titleBlock, legend);
+  header.appendChild(headerTop);
 
   if (!isPrintMode) {
     const actions = el('div', { className: 'dashboard-header__actions' });
@@ -1250,9 +1393,7 @@ function renderDashboard() {
       createPrintLayoutButton(),
       createExportButton()
     );
-    header.append(infoGroup, actions);
-  } else {
-    header.appendChild(infoGroup);
+    header.appendChild(actions);
   }
   canvas.appendChild(header);
 
