@@ -1,7 +1,6 @@
 import { toPng } from 'html-to-image';
 import { MEAL_BREAKDOWN_PROMPT, PICTURE_GENERATION_PROMPT } from '../scripts/prompts.js';
 import { renderCardSnapshotPdf } from './export/card-composer.js';
-import { renderDashboardPdf } from './export/pdf-composer.js';
 import './style.css';
 
 const DEFAULT_DATA = {
@@ -95,18 +94,7 @@ const appState = {
   isPrintCardExporting: false
 };
 
-const exportPreviewState = {
-  isOpen: false,
-  blob: null,
-  url: '',
-  filename: '',
-  meta: null,
-  isSaving: false,
-  error: ''
-};
-
 const uploaderOverlay = createUploaderOverlay();
-const exportPreviewOverlay = createExportPreviewOverlay();
 let printModeHintTitleEl = null;
 let printModeHintBodyEl = null;
 let printModeHintResetTimer = null;
@@ -241,24 +229,6 @@ function createUploaderOverlay() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && appState.isUploaderOpen && !appState.isGenerating) {
       closeUploader();
-    }
-  });
-  document.body.appendChild(overlay);
-  return overlay;
-}
-
-function createExportPreviewOverlay() {
-  const overlay = document.createElement('div');
-  overlay.id = 'export-preview-overlay';
-  overlay.className = 'export-preview-overlay';
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay && !exportPreviewState.isSaving) {
-      closeExportPreview();
-    }
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && exportPreviewState.isOpen && !exportPreviewState.isSaving) {
-      closeExportPreview();
     }
   });
   document.body.appendChild(overlay);
@@ -424,260 +394,9 @@ function exitPrintMode() {
   renderDashboard();
 }
 
-function supportsSaveFilePicker() {
-  return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
-}
-
-function openExportPreview({ blob, filename, meta }) {
-  if (exportPreviewState.url) {
-    URL.revokeObjectURL(exportPreviewState.url);
-  }
-  exportPreviewState.isOpen = true;
-  exportPreviewState.blob = blob;
-  exportPreviewState.url = blob ? URL.createObjectURL(blob) : '';
-  exportPreviewState.filename = filename;
-  exportPreviewState.meta = meta ?? null;
-  exportPreviewState.error = '';
-  exportPreviewState.isSaving = false;
-  renderExportPreview();
-}
-
-function closeExportPreview() {
-  if (exportPreviewState.isSaving) {
-    return;
-  }
-  if (exportPreviewState.url) {
-    URL.revokeObjectURL(exportPreviewState.url);
-  }
-  exportPreviewState.isOpen = false;
-  exportPreviewState.url = '';
-  exportPreviewState.blob = null;
-  exportPreviewState.filename = '';
-  exportPreviewState.meta = null;
-  exportPreviewState.error = '';
-  renderExportPreview();
-}
-
-function renderExportPreview() {
-  if (!exportPreviewOverlay) return;
-  exportPreviewOverlay.classList.toggle('is-open', exportPreviewState.isOpen);
-  exportPreviewOverlay.innerHTML = '';
-  if (!exportPreviewState.isOpen) {
-    return;
-  }
-
-  const pickerSupported = supportsSaveFilePicker();
-  const panel = el('div', { className: 'export-preview' });
-
-  const header = el('div', { className: 'export-preview__header' });
-  header.appendChild(el('h2', { className: 'export-preview__title', text: 'Export preview' }));
-  const closeButton = el('button', {
-    className: 'export-preview__close',
-    html: '&times;',
-    attrs: { type: 'button', 'aria-label': 'Close export preview' }
-  });
-  closeButton.disabled = exportPreviewState.isSaving;
-  closeButton.addEventListener('click', closeExportPreview);
-  header.appendChild(closeButton);
-  panel.appendChild(header);
-
-  const body = el('div', { className: 'export-preview__body' });
-  const previewFigure = el('div', { className: 'export-preview__figure' });
-  if (exportPreviewState.url) {
-    const frame = document.createElement('iframe');
-    frame.className = 'export-preview__frame';
-    frame.src = exportPreviewState.url;
-    frame.title = 'PDF preview';
-    frame.loading = 'lazy';
-    frame.setAttribute('aria-label', 'PDF preview');
-    previewFigure.appendChild(frame);
-  } else {
-    previewFigure.appendChild(
-      el('p', {
-        className: 'export-preview__placeholder',
-        text: 'PDF ready to download.'
-      })
-    );
-  }
-  body.appendChild(previewFigure);
-
-  const details = el('div', { className: 'export-preview__details' });
-  const filenameField = el('label', { className: 'export-preview__label', text: 'File name' });
-  const filenameInput = document.createElement('input');
-  filenameInput.type = 'text';
-  filenameInput.value = exportPreviewState.filename || '';
-  filenameInput.placeholder = 'tracked-meals.png';
-  filenameInput.autocomplete = 'off';
-  filenameInput.disabled = exportPreviewState.isSaving;
-  filenameInput.addEventListener('input', (event) => {
-    exportPreviewState.filename = event.target.value;
-  });
-  filenameField.appendChild(filenameInput);
-  details.appendChild(filenameField);
-
-  if (exportPreviewState.meta) {
-    details.appendChild(
-      el('p', {
-        className: 'export-preview__meta',
-        text: buildExportMetaLine(exportPreviewState.meta)
-      })
-    );
-  }
-
-  details.appendChild(
-    el('p', {
-      className: 'export-preview__note',
-      text:
-        'This export is a vector PDF sized for letter landscape (≈11" × 8.5"), with margins baked in so you can print without extra tweaks.'
-    })
-  );
-
-  if (!pickerSupported) {
-    details.appendChild(
-      el('p', {
-        className: 'export-preview__note export-preview__note--warning',
-        text: 'Save As requires a Chromium-based browser. Use Download if your browser does not support the file picker.'
-      })
-    );
-  }
-
-  if (exportPreviewState.error) {
-    details.appendChild(
-      el('p', {
-        className: 'export-preview__error',
-        text: exportPreviewState.error
-      })
-    );
-  }
-
-  body.appendChild(details);
-  panel.appendChild(body);
-
-  const footer = el('div', { className: 'export-preview__footer' });
-  const buttons = el('div', { className: 'export-preview__buttons' });
-
-  const saveAsButton = createActionButton({
-    text: exportPreviewState.isSaving ? 'Saving…' : 'Save As…',
-    variant: 'primary',
-    onClick: () => handleExportSave(true)
-  });
-  saveAsButton.disabled = exportPreviewState.isSaving || !pickerSupported;
-  buttons.appendChild(saveAsButton);
-
-  const downloadButton = createActionButton({
-    text: exportPreviewState.isSaving ? 'Working…' : 'Download',
-    onClick: () => handleExportSave(false)
-  });
-  downloadButton.disabled = exportPreviewState.isSaving;
-  buttons.appendChild(downloadButton);
-
-  const cancelButton = el('button', {
-    className: 'tertiary-button export-preview__cancel',
-    text: 'Cancel',
-    attrs: { type: 'button' }
-  });
-  cancelButton.disabled = exportPreviewState.isSaving;
-  cancelButton.addEventListener('click', closeExportPreview);
-
-  footer.appendChild(buttons);
-  footer.appendChild(cancelButton);
-  panel.appendChild(footer);
-
-  exportPreviewOverlay.appendChild(panel);
-}
-
-function buildExportMetaLine(meta) {
-  if (!meta || (!meta.widthPt && !meta.widthIn) || (!meta.heightPt && !meta.heightIn)) return '';
-  const fallbackDpi = meta.dpi || 72;
-  const widthInches = (meta.widthIn ?? meta.widthPt / fallbackDpi).toFixed(2).replace(/\.00$/, '');
-  const heightInches = (meta.heightIn ?? meta.heightPt / fallbackDpi).toFixed(2).replace(/\.00$/, '');
-  let line = `${widthInches}" × ${heightInches}" landscape PDF`;
-  if (meta.dpi) {
-    line += ` · internal grid ${meta.dpi} DPI`;
-  }
-  if (meta.columnWidthPt || meta.columnWidthIn) {
-    const columnInches = (meta.columnWidthIn ?? meta.columnWidthPt / fallbackDpi).toFixed(2).replace(/\.00$/, '');
-    line += ` · column width ≈ ${columnInches}"`;
-  }
-  return line;
-}
-
-function sanitizeFileName(input) {
-  const fallback = 'tracked-meals';
-  if (!input) return fallback;
-  const trimmed = input.trim();
-  if (!trimmed) return fallback;
-  const withoutInvalid = trimmed.replace(/[\\/:*?"<>|]+/g, '-');
-  const collapsed = withoutInvalid.replace(/\s+/g, '-').replace(/-+/g, '-');
-  const cleaned = collapsed.replace(/^-+|-+$/g, '');
-  return (cleaned || fallback).toLowerCase();
-}
-
-function ensurePdfExtension(name) {
-  if (!name) return 'tracked-meals.pdf';
-  const trimmed = name.trim();
-  if (!trimmed) return 'tracked-meals.pdf';
-  const withoutExtension = trimmed.replace(/\.pdf$/i, '');
-  return `${withoutExtension}.pdf`;
-}
-
-function buildExportFilename() {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `tracked-meals-${timestamp}.pdf`;
-}
-
 function buildPrintCardFilename() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   return `print-card-${timestamp}.pdf`;
-}
-
-async function handleExportSave(preferPicker = false) {
-  if (!exportPreviewState.blob) return;
-  if (preferPicker && !supportsSaveFilePicker()) {
-    exportPreviewState.error = 'Save As is unavailable in this browser. Please use Download instead.';
-    renderExportPreview();
-    return;
-  }
-
-  exportPreviewState.isSaving = true;
-  exportPreviewState.error = '';
-  renderExportPreview();
-
-  try {
-    const sanitized = sanitizeFileName(exportPreviewState.filename);
-    const filename = ensurePdfExtension(sanitized);
-    if (preferPicker) {
-      await saveBlobWithPicker(exportPreviewState.blob, filename);
-    } else {
-      await triggerBlobDownload(exportPreviewState.blob, filename);
-    }
-    closeExportPreview();
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      exportPreviewState.isSaving = false;
-      renderExportPreview();
-      return;
-    }
-    console.error('Saving export failed', error);
-    exportPreviewState.error = error?.message || 'Unable to save the exported file.';
-    exportPreviewState.isSaving = false;
-    renderExportPreview();
-  }
-}
-
-async function saveBlobWithPicker(blob, filename) {
-  const handle = await window.showSaveFilePicker({
-    suggestedName: filename,
-    types: [
-      {
-        description: 'PDF Document',
-        accept: { 'application/pdf': ['.pdf'] }
-      }
-    ]
-  });
-  const writable = await handle.createWritable();
-  await writable.write(blob);
-  await writable.close();
 }
 
 async function triggerBlobDownload(blob, filename) {
@@ -1294,33 +1013,6 @@ function createPrintLayoutButton() {
   return button;
 }
 
-function createExportButton({ variant = 'ghost' } = {}) {
-  const button = createActionButton({
-    text: 'Export PDF',
-    variant
-  });
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    button.textContent = 'Rendering…';
-    try {
-      const data = appState.dashboardData ?? DEFAULT_DATA;
-      const { blob, meta } = await renderDashboardPdf(data);
-      openExportPreview({
-        blob,
-        filename: buildExportFilename(),
-        meta
-      });
-    } catch (error) {
-      console.error('Failed to export dashboard', error);
-      alert('Unable to export the dashboard. Check console for details.');
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Export PDF';
-    }
-  });
-  return button;
-}
-
 function createDownloadDataButton() {
   const button = createActionButton({
     text: 'Download JSON'
@@ -1390,8 +1082,7 @@ function renderDashboard() {
     actions.append(
       uploaderButton,
       createDownloadDataButton(),
-      createPrintLayoutButton(),
-      createExportButton()
+      createPrintLayoutButton()
     );
     header.appendChild(actions);
   }

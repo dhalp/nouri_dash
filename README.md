@@ -25,7 +25,7 @@ npm install
 3. Paste your OpenAI API key into the **OpenAI API Key** card, press **Save key**, and confirm the “saved locally” message (the key only lives in this browser).
 4. Provide client/week details, and add meals (text or photos) for each day.
 5. Hit **Build Dashboard Data**. The wizard pipes every meal through the Meal Breakdown prompt, optionally runs the Picture Generation prompt, and swaps the live dashboard to the freshly generated data.
-6. Use **Download JSON** to export the structured output if you want to reuse it later, or **Export PDF** for the finished, print-ready board.
+6. Use **Download JSON** to export the structured output if you want to reuse it later, or switch to **Print Layout** when you’re ready for a client-facing board/PDF.
 
 The wizard keeps the provided prompts intact, shows progress for each meal, and stores the latest breakdown inside the session so you can tweak percentages without re-entering everything.
 
@@ -93,7 +93,7 @@ Use **Print Layout** whenever you need a quick browser-to-PDF export. That butto
 
 Need just a quick shareable card? While you’re in Print Layout, click the floating helper bubble to capture the current board as a fixed 10" × 6.25" PDF card. The app renders the on-screen layout to an image, centers it on the card canvas, and downloads it instantly—perfect for email or social updates.
 
-The **Export PDF** button is still available when you want the deterministic vector composer: it generates a PDF explicitly composed for 11" × 8.5" landscape pages, keeps text selectable, and hardcodes margins so you can send the file straight to a printer. **Download JSON** still pulls the current dataset (including in-browser runs from the wizard).
+If you still need the deterministic vector composer for a perfectly aligned PDF, run `npm run test:export`; the CLI version renders the same 11" × 8.5" layout and saves it to `dist/sample-dashboard.pdf`. **Download JSON** continues to pull the current dataset (including in-browser runs from the wizard).
 
 ### Validate the export layout
 
