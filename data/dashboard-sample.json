@@ -1,0 +1,322 @@
+{
+  "clientName": "Emily",
+  "weekLabel": "tracked meals",
+  "palette": {
+    "vegFruit": "#4fa742",
+    "healthyCarbs": "#f5d957",
+    "protein": "#f59f1a",
+    "pauseFood": "#f2899a",
+    "neutral": "#d2d2d2",
+    "canvasBg": "#ffffff"
+  },
+  "days": [
+    {
+      "label": "Monday",
+      "meals": [
+        {
+          "id": "mon-breakfast",
+          "title": "Greek yogurt parfait",
+          "breakdown": {
+            "vegFruit": 45,
+            "healthyCarbs": 25,
+            "protein": 25,
+            "pauseFood": 5,
+            "summary": "Yogurt adds protein while berries keep sugars natural.",
+            "adjustmentTips": "Swap granola for oats if you need more carbs."
+          },
+          "source": { "type": "text", "value": "Yogurt with berries and chia" }
+        },
+        {
+          "id": "mon-lunch",
+          "title": "Veggie quesadilla",
+          "breakdown": {
+            "vegFruit": 30,
+            "healthyCarbs": 30,
+            "protein": 30,
+            "pauseFood": 10,
+            "summary": "Whole-grain tortilla balances the cheese.",
+            "adjustmentTips": "Add bell peppers for extra veg."
+          },
+          "source": { "type": "text", "value": "Whole grain quesadilla with cheese and veg" }
+        },
+        {
+          "id": "mon-dinner",
+          "title": "Salmon bowls",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 25,
+            "protein": 35,
+            "pauseFood": 5,
+            "summary": "Roasted salmon and veggies fill the plate.",
+            "adjustmentTips": "Keep sauces light to limit pause foods."
+          },
+          "source": { "type": "text", "value": "Salmon, quinoa, veggies" }
+        }
+      ]
+    },
+    {
+      "label": "Tuesday",
+      "meals": [
+        {
+          "id": "tue-breakfast",
+          "title": "Overnight oats",
+          "breakdown": {
+            "vegFruit": 25,
+            "healthyCarbs": 40,
+            "protein": 25,
+            "pauseFood": 10,
+            "summary": "Oats and chia deliver fiber with a drizzle of honey.",
+            "adjustmentTips": "Add sliced apples for crunch instead of extra honey."
+          },
+          "source": { "type": "text", "value": "Oats, chia, berries" }
+        },
+        {
+          "id": "tue-lunch",
+          "title": "Rainbow bento",
+          "breakdown": {
+            "vegFruit": 40,
+            "healthyCarbs": 20,
+            "protein": 30,
+            "pauseFood": 10,
+            "summary": "Carrot sticks, hummus, and turkey keep variety high.",
+            "adjustmentTips": "Try snap peas when carrots get boring."
+          },
+          "source": { "type": "text", "value": "Bento with hummus and turkey" }
+        },
+        {
+          "id": "tue-dinner",
+          "title": "Turkey meatballs",
+          "breakdown": {
+            "vegFruit": 30,
+            "healthyCarbs": 30,
+            "protein": 30,
+            "pauseFood": 10,
+            "summary": "Tomato sauce keeps pause foods modest.",
+            "adjustmentTips": "Serve over spaghetti squash for more veg."
+          },
+          "source": { "type": "text", "value": "Meatballs with veggies" }
+        }
+      ]
+    },
+    {
+      "label": "Wednesday",
+      "meals": [
+        {
+          "id": "wed-breakfast",
+          "title": "Smoothie bowl",
+          "breakdown": {
+            "vegFruit": 55,
+            "healthyCarbs": 15,
+            "protein": 20,
+            "pauseFood": 10,
+            "summary": "Spinach hides under the berries for extra veg.",
+            "adjustmentTips": "Top with seeds for crunch instead of candy."
+          },
+          "source": { "type": "text", "value": "Smoothie with spinach" }
+        },
+        {
+          "id": "wed-lunch",
+          "title": "Chicken pita",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 30,
+            "protein": 25,
+            "pauseFood": 10,
+            "summary": "Pita pocket holds roasted veggies and chicken.",
+            "adjustmentTips": "Add cucumber yogurt sauce for cooling protein."
+          },
+          "source": { "type": "text", "value": "Whole wheat pita with chicken" }
+        },
+        {
+          "id": "wed-dinner",
+          "title": "Veggie pasta bake",
+          "breakdown": {
+            "vegFruit": 40,
+            "healthyCarbs": 30,
+            "protein": 20,
+            "pauseFood": 10,
+            "summary": "Roasted zucchini keeps the pasta light.",
+            "adjustmentTips": "Try lentil pasta for more protein."
+          },
+          "source": { "type": "text", "value": "Veggie pasta bake" }
+        }
+      ]
+    },
+    {
+      "label": "Thursday",
+      "meals": [
+        {
+          "id": "thu-breakfast",
+          "title": "Egg muffins",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 20,
+            "protein": 35,
+            "pauseFood": 10,
+            "summary": "Mini frittatas are portable protein.",
+            "adjustmentTips": "Serve with fruit instead of extra cheese."
+          },
+          "source": { "type": "text", "value": "Egg muffins" }
+        },
+        {
+          "id": "thu-lunch",
+          "title": "Soba noodle salad",
+          "breakdown": {
+            "vegFruit": 30,
+            "healthyCarbs": 40,
+            "protein": 20,
+            "pauseFood": 10,
+            "summary": "Soba plus edamame keeps it filling.",
+            "adjustmentTips": "Use citrus dressing to cut sugar."
+          },
+          "source": { "type": "text", "value": "Cold soba salad" }
+        },
+        {
+          "id": "thu-dinner",
+          "title": "Sheet pan fajitas",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 25,
+            "protein": 30,
+            "pauseFood": 10,
+            "summary": "Peppers dominate the tray so veg stay high.",
+            "adjustmentTips": "Serve with avocado for healthy fats."
+          },
+          "source": { "type": "text", "value": "Fajitas" }
+        }
+      ]
+    },
+    {
+      "label": "Friday",
+      "meals": [
+        {
+          "id": "fri-breakfast",
+          "title": "Breakfast tacos",
+          "breakdown": {
+            "vegFruit": 30,
+            "healthyCarbs": 30,
+            "protein": 30,
+            "pauseFood": 10,
+            "summary": "Scrambled eggs and pico keep flavors bright.",
+            "adjustmentTips": "Swap sour cream for Greek yogurt."
+          },
+          "source": { "type": "text", "value": "Breakfast tacos" }
+        },
+        {
+          "id": "fri-lunch",
+          "title": "Caprese skewers",
+          "breakdown": {
+            "vegFruit": 45,
+            "healthyCarbs": 15,
+            "protein": 25,
+            "pauseFood": 15,
+            "summary": "Tomatoes dominate but mozzarella adds pause foods.",
+            "adjustmentTips": "Pair with whole-grain crackers for carbs."
+          },
+          "source": { "type": "text", "value": "Caprese skewers" }
+        },
+        {
+          "id": "fri-dinner",
+          "title": "DIY pizza night",
+          "breakdown": {
+            "vegFruit": 25,
+            "healthyCarbs": 35,
+            "protein": 20,
+            "pauseFood": 20,
+            "summary": "Pause foods spike with extra cheese.",
+            "adjustmentTips": "Offer a salad starter to balance the meal."
+          },
+          "source": { "type": "text", "value": "Pizza with salad" }
+        }
+      ]
+    },
+    {
+      "label": "Saturday",
+      "meals": [
+        {
+          "id": "sat-breakfast",
+          "title": "Blueberry pancakes",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 45,
+            "protein": 15,
+            "pauseFood": 5,
+            "summary": "Whole-wheat mix helps fiber.",
+            "adjustmentTips": "Serve with turkey sausage for protein."
+          },
+          "source": { "type": "text", "value": "Pancakes" }
+        },
+        {
+          "id": "sat-lunch",
+          "title": "Garden wraps",
+          "breakdown": {
+            "vegFruit": 40,
+            "healthyCarbs": 25,
+            "protein": 25,
+            "pauseFood": 10,
+            "summary": "Crunchy veggies carry most of the wrap.",
+            "adjustmentTips": "Add beans if you need more protein."
+          },
+          "source": { "type": "text", "value": "Veggie wrap" }
+        },
+        {
+          "id": "sat-dinner",
+          "title": "Grilled shrimp bowls",
+          "breakdown": {
+            "vegFruit": 35,
+            "healthyCarbs": 25,
+            "protein": 35,
+            "pauseFood": 5,
+            "summary": "Shrimp plus mango salsa hit multiple groups.",
+            "adjustmentTips": "Keep chips on the side so pause foods stay low."
+          },
+          "source": { "type": "text", "value": "Shrimp bowls" }
+        }
+      ]
+    },
+    {
+      "label": "Sunday",
+      "meals": [
+        {
+          "id": "sun-breakfast",
+          "title": "Bagel brunch plate",
+          "breakdown": {
+            "vegFruit": 25,
+            "healthyCarbs": 45,
+            "protein": 20,
+            "pauseFood": 10,
+            "summary": "Bagel and lox combo keeps protein moderate.",
+            "adjustmentTips": "Pile on cucumbers for crunch."
+          },
+          "source": { "type": "text", "value": "Bagel brunch" }
+        },
+        {
+          "id": "sun-lunch",
+          "title": "Soup & salad",
+          "breakdown": {
+            "vegFruit": 45,
+            "healthyCarbs": 20,
+            "protein": 25,
+            "pauseFood": 10,
+            "summary": "Brothy soup plus salad keeps pause foods low.",
+            "adjustmentTips": "Add beans if you need staying power."
+          },
+          "source": { "type": "text", "value": "Soup and salad" }
+        },
+        {
+          "id": "sun-dinner",
+          "title": "Roast chicken",
+          "breakdown": {
+            "vegFruit": 30,
+            "healthyCarbs": 30,
+            "protein": 35,
+            "pauseFood": 5,
+            "summary": "Sheet pan meal with carrots and potatoes.",
+            "adjustmentTips": "Use herbs instead of extra butter."
+          },
+          "source": { "type": "text", "value": "Roast chicken dinner" }
+        }
+      ]
+    }
+  ]
+}

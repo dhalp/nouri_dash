@@ -1,6 +1,6 @@
 # Emily's Dashboard
 
-Automated workflow that uses the OpenAI Responses API to transform raw meal notes or photos into a weekly dashboard that matches the reference layout (`img_456`). The generator script orchestrates the provided nutrition prompts, produces structured data (JSON + generated assets), and the frontend renders an exportable dashboard that can be downloaded as a PNG.
+Automated workflow that uses the OpenAI Responses API to transform raw meal notes or photos into a weekly dashboard that matches the reference layout (`img_456`). The generator script orchestrates the provided nutrition prompts, produces structured data (JSON + generated assets), and the frontend renders an exportable dashboard that can be downloaded as a print-ready PDF.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ npm install
 3. Paste your OpenAI API key into the **OpenAI API Key** card, press **Save key**, and confirm the “saved locally” message (the key only lives in this browser).
 4. Provide client/week details, and add meals (text or photos) for each day.
 5. Hit **Build Dashboard Data**. The wizard pipes every meal through the Meal Breakdown prompt, optionally runs the Picture Generation prompt, and swaps the live dashboard to the freshly generated data.
-6. Use **Download JSON** to export the structured output if you want to reuse it later, or **Export PNG** for the finished board.
+6. Use **Download JSON** to export the structured output if you want to reuse it later, or **Export PDF** for the finished, print-ready board.
 
 The wizard keeps the provided prompts intact, shows progress for each meal, and stores the latest breakdown inside the session so you can tweak percentages without re-entering everything.
 
@@ -89,7 +89,19 @@ Open `http://localhost:5173`. The page replicates the layout from `img_456`, inc
 - Meal tiles with left-side proportion bars and right-side connectors.
 - Legend with brand marks and emoji substitutes for the broccoli/chicken/bread/pause icons.
 
-Use the **Export PNG** button to save the rendered board. The export relies on `html-to-image` and preserves the exact canvas styling. **Download JSON** pulls the current dataset (including in-browser runs from the wizard).
+Use **Print Layout** whenever you need a quick browser-to-PDF export. That button swaps the app into a full-bleed, button-free view sized for letter landscape pages, automatically hides overlays, and labels empty tiles as “meal not provided.” Once in that mode press Cmd+P/Ctrl+P and print/save at 100%—no manual 75% scaling required. (If you forget to hit the button first, the page still auto-snapshots into the same layout during `beforeprint`.)
+
+The **Export PDF** button is still available when you want the deterministic vector composer: it generates a PDF explicitly composed for 11" × 8.5" landscape pages, keeps text selectable, and hardcodes margins so you can send the file straight to a printer. **Download JSON** still pulls the current dataset (including in-browser runs from the wizard).
+
+### Validate the export layout
+
+The PDF composer now has its own regression check. Run:
+
+```bash
+npm run test:export
+```
+
+This script renders `data/dashboard-sample.json`, saves `dist/sample-dashboard.pdf`, and verifies that the stacked header, legend, and all seven day columns fit within the printable body height. Open the generated file to spot-check typography or share it with reviewers without booting the browser.
 
 ### Drag-and-drop grading
 
@@ -105,9 +117,12 @@ npm run preview
 ## Key files
 
 - `scripts/generate-dashboard.js` – Orchestrates API calls, data normalization, and asset output.
+- `scripts/validate-export-layout.js` – CLI check that generates a sample PDF and asserts the layout fits on a letter landscape page.
 - `scripts/prompts.js` – Verbatim copies of the provided nutrition + picture prompts.
 - `src/main.js` & `src/style.css` – Render logic and styling that mirror the provided reference.
+- `src/export/pdf-composer.js` – Pure-PDF renderer that builds the seven-column export layout.
 - `public/data/dashboard-data.json` – Generated runtime data (created during `npm run generate`).
+- `data/dashboard-sample.json` – Sample dashboard data that powers the export validation script.
 
 ## Troubleshooting
 
