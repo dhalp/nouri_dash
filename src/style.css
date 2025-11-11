@@ -555,6 +555,18 @@ body.print-mode .meal-card__drop-overlay {
   gap: 16px;
 }
 
+.tile-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tile-editor__section-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .tile-editor__field {
   display: flex;
   flex-direction: column;
@@ -574,10 +586,31 @@ body.print-mode .meal-card__drop-overlay {
   resize: vertical;
 }
 
+.tile-editor__breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.tile-editor__breakdown-field input {
+  resize: none;
+}
+
 .tile-editor__hint {
   font-size: 13px;
   color: var(--text-muted);
   margin: 0;
+}
+
+.tile-editor__total {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.tile-editor__total.is-warning {
+  color: #c44545;
+  font-weight: 600;
 }
 
 .tile-editor__actions {
@@ -878,6 +911,30 @@ body.print-mode .meal-card__drop-overlay {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.uploader-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.uploader-breakdown-field__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.uploader-breakdown-total {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.uploader-breakdown-total.is-warning {
+  color: #c44545;
+  font-weight: 600;
 }
 
 .uploader-status {

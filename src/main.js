@@ -37,6 +37,35 @@ function createDefaultBreakdownSummary() {
   };
 }
 
+function createBreakdownPercentages(source = null) {
+  const base = source ? structuredClone(source) : createDefaultBreakdownSummary();
+  return {
+    vegFruit: clampPercentage(base.vegFruit ?? 0),
+    healthyCarbs: clampPercentage(base.healthyCarbs ?? 0),
+    protein: clampPercentage(base.protein ?? 0),
+    pauseFood: clampPercentage(base.pauseFood ?? 0)
+  };
+}
+
+function clampPercentage(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  const clamped = Math.min(100, Math.max(0, numeric));
+  return Math.round(clamped * 10) / 10;
+}
+
+function sumBreakdownPercentages(breakdown = {}) {
+  return ['vegFruit', 'healthyCarbs', 'protein', 'pauseFood'].reduce(
+    (total, key) => total + (Number(breakdown[key]) || 0),
+    0
+  );
+}
+
+function formatBreakdownTotalText(breakdown) {
+  const total = Math.round(sumBreakdownPercentages(breakdown) * 10) / 10;
+  return `Current total: ${total}% (goal 100%)`;
+}
+
 const CATEGORY_KEYS = [
   { key: 'vegFruit', label: 'Always Food', emoji: '🥦' },
   { key: 'protein', label: 'Fuel Food · Protein', emoji: '🍗' },
@@ -278,7 +307,8 @@ function createInitialTileEditorState() {
     slotIndex: null,
     title: '',
     description: '',
-    mealId: null
+    mealId: null,
+    breakdown: createBreakdownPercentages()
   };
 }
 
@@ -1343,14 +1373,25 @@ function openTileEditor({ dayIndex, slotIndex }) {
     (dashboardMeal?.source?.path ? formatFilenameTitle(dashboardMeal.source.path) : '') ||
     `Day ${dayIndex + 1} meal ${slotIndex + 1}`;
 
-  let description = '';
-  if (formMeal?.type === 'text') {
-    description = formMeal.text ?? '';
-  } else if (dashboardMeal?.source?.type === 'text') {
-    description = dashboardMeal.source.value ?? '';
-  } else if (formMeal?.caption) {
-    description = formMeal.caption ?? '';
+  const summarySource =
+    formMeal?.lastBreakdown?.summary ||
+    dashboardMeal?.breakdown?.summary ||
+    '';
+  let description = summarySource || '';
+  if (!description) {
+    if (formMeal?.type === 'text') {
+      description = formMeal.text ?? '';
+    } else if (dashboardMeal?.source?.type === 'text') {
+      description = dashboardMeal.source.value ?? '';
+    } else if (formMeal?.caption) {
+      description = formMeal.caption ?? '';
+    }
   }
+
+  const breakdownSource =
+    formMeal?.lastBreakdown ||
+    dashboardMeal?.breakdown ||
+    createDefaultBreakdownSummary();
 
   appState.tileEditorState = {
     isOpen: true,
@@ -1358,7 +1399,8 @@ function openTileEditor({ dayIndex, slotIndex }) {
     slotIndex,
     mealId: formMeal?.id || dashboardMeal?.id || null,
     title: titleFallback,
-    description
+    description,
+    breakdown: createBreakdownPercentages(breakdownSource)
   };
   renderTileEditor();
 }
@@ -1422,6 +1464,36 @@ function renderTileEditor() {
     }
   }));
 
+  if (!state.breakdown) {
+    appState.tileEditorState.breakdown = createBreakdownPercentages();
+  }
+  const totalIndicator = el('p', {
+    className: 'tile-editor__total',
+    text: formatBreakdownTotalText(appState.tileEditorState.breakdown)
+  });
+  const refreshTotalIndicator = () => {
+    totalIndicator.textContent = formatBreakdownTotalText(appState.tileEditorState.breakdown);
+    const roundedTotal = Math.round(sumBreakdownPercentages(appState.tileEditorState.breakdown));
+    totalIndicator.classList.toggle('is-warning', roundedTotal !== 100);
+  };
+  refreshTotalIndicator();
+
+  const breakdownGrid = buildTileEditorBreakdownGrid({
+    breakdown: appState.tileEditorState.breakdown,
+    onChange: (key, value) => {
+      appState.tileEditorState.breakdown[key] = value;
+      refreshTotalIndicator();
+    }
+  });
+
+  const breakdownSection = el('div', { className: 'tile-editor__section tile-editor__section--breakdown' });
+  breakdownSection.appendChild(
+    el('span', { className: 'tile-editor__section-label', text: 'Meal breakdown (%)' })
+  );
+  breakdownSection.appendChild(breakdownGrid);
+  breakdownSection.appendChild(totalIndicator);
+  body.appendChild(breakdownSection);
+
   const hint = el('p', {
     className: 'tile-editor__hint',
     text: 'Saved notes sync into the Data Wizard and are used as text input for future generations.'
@@ -1469,6 +1541,46 @@ function buildTileEditorField({ label, inputType, value, placeholder, onInput })
   return wrapper;
 }
 
+function buildBreakdownInputGrid({
+  breakdown,
+  onChange,
+  disabled = false,
+  gridClass = '',
+  fieldClass = '',
+  labelClass = ''
+}) {
+  const grid = el('div', { className: gridClass });
+  CATEGORY_KEYS.forEach(({ key, label, emoji }) => {
+    const field = el('label', { className: fieldClass });
+    const caption = el('span', { className: labelClass, text: `${emoji} ${label}` });
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.step = '1';
+    input.value = String(breakdown?.[key] ?? 0);
+    input.disabled = disabled;
+    input.addEventListener('input', (event) => {
+      const nextValue = clampPercentage(event.target.value);
+      event.target.value = String(nextValue);
+      onChange?.(key, nextValue);
+    });
+    field.append(caption, input);
+    grid.appendChild(field);
+  });
+  return grid;
+}
+
+function buildTileEditorBreakdownGrid({ breakdown, onChange }) {
+  return buildBreakdownInputGrid({
+    breakdown,
+    onChange,
+    gridClass: 'tile-editor__breakdown-grid',
+    fieldClass: 'tile-editor__field tile-editor__breakdown-field',
+    labelClass: 'tile-editor__field-label'
+  });
+}
+
 function handleTileEditorSave() {
   const state = appState.tileEditorState;
   if (state.dayIndex === null || state.slotIndex === null) {
@@ -1495,6 +1607,11 @@ function handleTileEditorSave() {
   if (!meal.lastBreakdown.summary && meal.text) {
     meal.lastBreakdown.summary = 'Description saved. Re-run “Build Dashboard Data” to grade this meal.';
   }
+
+  const editorBreakdown = state.breakdown || createBreakdownPercentages();
+  CATEGORY_KEYS.forEach(({ key }) => {
+    meal.lastBreakdown[key] = clampPercentage(editorBreakdown[key]);
+  });
 
   formDay.meals[state.slotIndex] = meal;
   syncFormMealToDashboard(state.dayIndex, state.slotIndex, { allowCreate: true });
@@ -1857,12 +1974,37 @@ function renderMealEditor(day, meal, dayIndex, mealIndex) {
 
   if (meal.lastBreakdown) {
     const breakdownEditor = el('div', { className: 'uploader-breakdown-editor' });
-    breakdownEditor.appendChild(
-      el('p', {
-        className: 'uploader-note',
-        text: `Latest breakdown · Veg & Fruit ${meal.lastBreakdown.vegFruit}% · Healthy Carbs ${meal.lastBreakdown.healthyCarbs}% · Protein ${meal.lastBreakdown.protein}% · Pause Food ${meal.lastBreakdown.pauseFood}%`
-      })
-    );
+    const breakdownSummary = el('p', { className: 'uploader-note' });
+    const totalIndicator = el('p', {
+      className: 'uploader-breakdown-total',
+      text: formatBreakdownTotalText(meal.lastBreakdown)
+    });
+    const formatSummary = () => {
+      const getValue = (key) => clampPercentage(meal.lastBreakdown?.[key] ?? 0);
+      return `Latest breakdown (edit below) · Veg & Fruit ${getValue('vegFruit')}% · Healthy Carbs ${getValue('healthyCarbs')}% · Protein ${getValue('protein')}% · Pause Food ${getValue('pauseFood')}%`;
+    };
+    const refreshBreakdownMeta = () => {
+      breakdownSummary.textContent = formatSummary();
+      totalIndicator.textContent = formatBreakdownTotalText(meal.lastBreakdown);
+      const roundedTotal = Math.round(sumBreakdownPercentages(meal.lastBreakdown));
+      totalIndicator.classList.toggle('is-warning', roundedTotal !== 100);
+    };
+    const breakdownGrid = buildBreakdownInputGrid({
+      breakdown: meal.lastBreakdown,
+      disabled: appState.isGenerating,
+      gridClass: 'uploader-breakdown-grid',
+      fieldClass: 'uploader-field uploader-breakdown-field',
+      labelClass: 'uploader-breakdown-field__label',
+      onChange: (key, value) => {
+        meal.lastBreakdown[key] = value;
+        refreshBreakdownMeta();
+        syncFormMealToDashboard(dayIndex, mealIndex, { silent: true });
+      }
+    });
+    refreshBreakdownMeta();
+    breakdownEditor.appendChild(breakdownSummary);
+    breakdownEditor.appendChild(breakdownGrid);
+    breakdownEditor.appendChild(totalIndicator);
 
     breakdownEditor.appendChild(
       renderTextAreaField({
