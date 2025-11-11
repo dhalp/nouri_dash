@@ -50,3 +50,4 @@ public/data/dashboard-data.json
 public/generated/*
 !public/generated/.gitkeep
 .env.local
+.env.local
