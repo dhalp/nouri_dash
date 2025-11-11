@@ -26,6 +26,17 @@ const DEFAULT_DATA = {
   }))
 };
 
+function createDefaultBreakdownSummary() {
+  return {
+    vegFruit: 0,
+    healthyCarbs: 0,
+    protein: 0,
+    pauseFood: 0,
+    summary: '',
+    adjustmentTips: ''
+  };
+}
+
 const CATEGORY_KEYS = [
   { key: 'vegFruit', label: 'Always Food', emoji: '🥦' },
   { key: 'protein', label: 'Fuel Food · Protein', emoji: '🍗' },
@@ -91,10 +102,12 @@ const appState = {
   apiKeyStatus: { type: 'idle', message: '' },
   isApiKeyVisible: false,
   viewMode: VIEW_MODES.interactive,
-  isPrintCardExporting: false
+  isPrintCardExporting: false,
+  tileEditorState: createInitialTileEditorState()
 };
 
 const uploaderOverlay = createUploaderOverlay();
+const tileEditorOverlay = createTileEditorOverlay();
 let printModeHintTitleEl = null;
 let printModeHintBodyEl = null;
 let printModeHintResetTimer = null;
@@ -131,6 +144,31 @@ function ensureDashboardDay(dayIndex) {
   return appState.dashboardData.days[dayIndex];
 }
 
+function ensureFormDay(dayIndex) {
+  if (!Array.isArray(appState.formData.days)) {
+    appState.formData.days = createInitialFormState().days;
+  }
+  while (appState.formData.days.length <= dayIndex) {
+    appState.formData.days.push({
+      id: `day-${appState.formData.days.length + 1}`,
+      label: `Day ${appState.formData.days.length + 1}`,
+      meals: []
+    });
+  }
+  return appState.formData.days[dayIndex];
+}
+
+function ensureFormMeal(dayIndex, slotIndex, type = 'text') {
+  const day = ensureFormDay(dayIndex);
+  while (day.meals.length <= slotIndex) {
+    day.meals.push(createEmptyMeal(type));
+  }
+  if (!day.meals[slotIndex]) {
+    day.meals[slotIndex] = createEmptyMeal(type);
+  }
+  return day.meals[slotIndex];
+}
+
 function normalizeDayMeals(day) {
   if (!Array.isArray(day.meals)) {
     day.meals = [];
@@ -149,6 +187,32 @@ function setDashboardMeal(dayIndex, slotIndex, meal) {
   normalizeDayMeals(day);
 }
 
+function syncFormMealToDashboard(dayIndex, slotIndex, { silent = false, allowCreate = false } = {}) {
+  if (!appState.dashboardData || !Array.isArray(appState.formData.days)) return;
+  const hasExistingDay = Array.isArray(appState.dashboardData.days) && appState.dashboardData.days[dayIndex];
+  if (!allowCreate && !hasExistingDay) return;
+
+  const formDay = appState.formData.days[dayIndex];
+  const mealState = formDay?.meals?.[slotIndex];
+  if (!mealState) return;
+
+  if (!allowCreate) {
+    const existingMeal = hasExistingDay && appState.dashboardData.days[dayIndex].meals?.[slotIndex];
+    if (!existingMeal) return;
+  }
+
+  if (!mealState.lastBreakdown) {
+    mealState.lastBreakdown = createDefaultBreakdownSummary();
+  }
+
+  const updatedMeal = buildGeneratedMeal(mealState);
+  setDashboardMeal(dayIndex, slotIndex, updatedMeal);
+  recomputeDaySummary(dayIndex);
+  if (!silent) {
+    renderDashboard();
+  }
+}
+
 function clearDashboardMeal(dayIndex, slotIndex) {
   const day = ensureDashboardDay(dayIndex);
   if (slotIndex in day.meals) {
@@ -156,6 +220,7 @@ function clearDashboardMeal(dayIndex, slotIndex) {
     normalizeDayMeals(day);
   }
   recomputeDaySummary(dayIndex);
+  syncFormDataFromDashboard();
 }
 
 function recomputeDaySummary(dayIndex) {
@@ -206,6 +271,93 @@ function createInitialFormState() {
   };
 }
 
+function createInitialTileEditorState() {
+  return {
+    isOpen: false,
+    dayIndex: null,
+    slotIndex: null,
+    title: '',
+    description: '',
+    mealId: null
+  };
+}
+
+function extractBase64FromDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return '';
+  const parts = dataUrl.split(',');
+  return parts.length > 1 ? parts.slice(1).join(',') : '';
+}
+
+function deriveMimeTypeFromDataUrl(dataUrl, fallback = 'image/png') {
+  if (typeof dataUrl !== 'string') return fallback;
+  const match = /^data:(.*?);/i.exec(dataUrl);
+  return match ? match[1] : fallback;
+}
+
+function convertDashboardMealToFormMeal(meal) {
+  const sourceType = meal?.source?.type === 'text' ? 'text' : 'image';
+  const converted = createEmptyMeal(sourceType);
+  converted.id = meal?.id || converted.id;
+  converted.title = meal?.title || '';
+  converted.caption = meal?.source?.caption || meal?.caption || '';
+  converted.generatedImageDataUrl = meal?.generatedImageDataUrl || converted.generatedImageDataUrl;
+
+  if (sourceType === 'text') {
+    converted.text = meal?.source?.value || '';
+  } else {
+    const inlineDataUrl =
+      meal?.generatedImageDataUrl ||
+      (meal?.source?.type === 'inline-image' ? meal?.source?.dataUrl : '') ||
+      '';
+    if (meal?.source?.type === 'image' && meal?.source?.base64) {
+      converted.fileBase64 = meal.source.base64;
+      converted.fileMimeType = meal.source.mimeType || 'image/png';
+      converted.fileDataUrl = buildDataUrl(converted.fileBase64, converted.fileMimeType);
+    } else if (inlineDataUrl) {
+      converted.fileDataUrl = inlineDataUrl;
+      converted.fileBase64 = extractBase64FromDataUrl(inlineDataUrl);
+      converted.fileMimeType = deriveMimeTypeFromDataUrl(inlineDataUrl);
+    }
+    converted.generatedImageDataUrl =
+      converted.generatedImageDataUrl || converted.fileDataUrl || inlineDataUrl;
+  }
+
+  if (meal?.breakdown) {
+    converted.lastBreakdown = structuredClone(meal.breakdown);
+  }
+  return converted;
+}
+
+function convertDashboardDayToFormDay(day, index) {
+  const meals = Array.isArray(day?.meals)
+    ? day.meals.filter(Boolean).map((meal) => convertDashboardMealToFormMeal(meal))
+    : [];
+  return {
+    id: `day-${index + 1}`,
+    label: day?.label ?? `Day ${index + 1}`,
+    meals
+  };
+}
+
+function syncFormDataFromDashboard({ shouldRender = true } = {}) {
+  const data = appState.dashboardData ?? structuredClone(DEFAULT_DATA);
+  appState.formData.clientName = data.clientName ?? DEFAULT_DATA.clientName;
+  appState.formData.weekLabel = data.weekLabel ?? DEFAULT_DATA.weekLabel;
+  appState.formData.startDate = data.startDate ?? appState.formData.startDate ?? '';
+
+  const sourceDays =
+    Array.isArray(data.days) && data.days.length ? data.days : DEFAULT_DATA.days;
+  appState.formData.days = sourceDays.map((day, index) => convertDashboardDayToFormDay(day, index));
+
+  if (!appState.formData.days.length) {
+    appState.formData.days = createInitialFormState().days;
+  }
+
+  if (shouldRender && appState.isUploaderOpen) {
+    renderUploader();
+  }
+}
+
 function createEmptyMeal(type = 'text') {
   return {
     id: crypto.randomUUID(),
@@ -229,6 +381,24 @@ function createUploaderOverlay() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && appState.isUploaderOpen && !appState.isGenerating) {
       closeUploader();
+    }
+  });
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function createTileEditorOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'tile-editor-overlay';
+  overlay.className = 'tile-editor-overlay';
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeTileEditor();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && appState.tileEditorState.isOpen) {
+      closeTileEditor();
     }
   });
   document.body.appendChild(overlay);
@@ -507,12 +677,12 @@ async function loadDashboardData() {
     const data = await response.json();
     appState.dashboardData = data;
     appState.tileUploads = {};
-    appState.formData.clientName = data.clientName ?? appState.formData.clientName;
-    appState.formData.weekLabel = data.weekLabel ?? appState.formData.weekLabel;
+    syncFormDataFromDashboard({ shouldRender: false });
   } catch (error) {
     console.warn('Falling back to sample data. Run the generator or use the uploader to populate real data.', error);
     appState.dashboardData = structuredClone(DEFAULT_DATA);
     appState.tileUploads = {};
+    syncFormDataFromDashboard({ shouldRender: false });
   }
 }
 
@@ -717,6 +887,9 @@ function createPlaceholderCard({ dayIndex, slotIndex, isPrintMode = false, empty
   card.append(allocation, frame, connector);
   if (!isPrintMode) {
     attachTileDrop(card, frame, { dayIndex, slotIndex, meal: null });
+    card.addEventListener('click', () => {
+      openTileEditor({ dayIndex, slotIndex });
+    });
   }
   return card;
 }
@@ -813,6 +986,9 @@ function createMealCard({ meal, palette, dayIndex, slotIndex, isPrintMode = fals
   card.title = meal.pending ? 'Analyzing photo…' : breakdown.summary ?? '';
   if (!isPrintMode) {
     attachTileDrop(card, imageContainer, { dayIndex, slotIndex, meal });
+    card.addEventListener('click', () => {
+      openTileEditor({ dayIndex, slotIndex });
+    });
   }
   return card;
 }
@@ -951,6 +1127,7 @@ async function processDroppedFile(dayIndex, slotIndex, file) {
     };
     setDashboardMeal(dayIndex, slotIndex, pendingMeal);
     renderDashboard();
+    syncFormDataFromDashboard();
 
     setTileUploadState(key, { phase: 'grading', message: 'Grading via OpenAI…' });
     renderDashboard();
@@ -983,6 +1160,7 @@ async function processDroppedFile(dayIndex, slotIndex, file) {
   } finally {
     setTileUploadState(key, null);
     renderDashboard();
+    syncFormDataFromDashboard();
   }
 }
 
@@ -1152,6 +1330,178 @@ function renderUploader() {
   panel.appendChild(body);
   panel.appendChild(renderUploaderFooter());
   uploaderOverlay.appendChild(panel);
+}
+
+function openTileEditor({ dayIndex, slotIndex }) {
+  if (appState.isGenerating) return;
+  const formDay = ensureFormDay(dayIndex);
+  const formMeal = formDay.meals?.[slotIndex] ?? null;
+  const dashboardMeal = appState.dashboardData?.days?.[dayIndex]?.meals?.[slotIndex] ?? null;
+  const titleFallback =
+    formMeal?.title ||
+    dashboardMeal?.title ||
+    (dashboardMeal?.source?.path ? formatFilenameTitle(dashboardMeal.source.path) : '') ||
+    `Day ${dayIndex + 1} meal ${slotIndex + 1}`;
+
+  let description = '';
+  if (formMeal?.type === 'text') {
+    description = formMeal.text ?? '';
+  } else if (dashboardMeal?.source?.type === 'text') {
+    description = dashboardMeal.source.value ?? '';
+  } else if (formMeal?.caption) {
+    description = formMeal.caption ?? '';
+  }
+
+  appState.tileEditorState = {
+    isOpen: true,
+    dayIndex,
+    slotIndex,
+    mealId: formMeal?.id || dashboardMeal?.id || null,
+    title: titleFallback,
+    description
+  };
+  renderTileEditor();
+}
+
+function closeTileEditor() {
+  if (!appState.tileEditorState.isOpen) return;
+  appState.tileEditorState = createInitialTileEditorState();
+  renderTileEditor();
+}
+
+function renderTileEditor() {
+  tileEditorOverlay.classList.toggle('is-open', appState.tileEditorState.isOpen);
+  if (!appState.tileEditorState.isOpen) {
+    tileEditorOverlay.innerHTML = '';
+    return;
+  }
+
+  const state = appState.tileEditorState;
+  tileEditorOverlay.innerHTML = '';
+  const dayLabel =
+    appState.dashboardData?.days?.[state.dayIndex]?.label ||
+    appState.formData?.days?.[state.dayIndex]?.label ||
+    `Day ${state.dayIndex + 1}`;
+  const modal = el('div', { className: 'tile-editor' });
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  const header = el('div', { className: 'tile-editor__header' });
+  header.appendChild(
+    el('h3', {
+      className: 'tile-editor__title',
+      text: `${dayLabel} · Meal ${state.slotIndex + 1}`
+    })
+  );
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'tile-editor__close';
+  closeButton.innerHTML = '&times;';
+  closeButton.setAttribute('aria-label', 'Close editor');
+  closeButton.addEventListener('click', closeTileEditor);
+  header.appendChild(closeButton);
+  modal.appendChild(header);
+
+  const body = el('div', { className: 'tile-editor__body' });
+  body.appendChild(buildTileEditorField({
+    label: 'Meal title',
+    inputType: 'input',
+    value: state.title,
+    placeholder: 'Give this plate a quick label…',
+    onInput: (value) => {
+      appState.tileEditorState.title = value;
+    }
+  }));
+
+  body.appendChild(buildTileEditorField({
+    label: 'Meal description',
+    inputType: 'textarea',
+    value: state.description,
+    placeholder: 'Describe everything on the plate. This will feed the generator next time.',
+    onInput: (value) => {
+      appState.tileEditorState.description = value;
+    }
+  }));
+
+  const hint = el('p', {
+    className: 'tile-editor__hint',
+    text: 'Saved notes sync into the Data Wizard and are used as text input for future generations.'
+  });
+  body.appendChild(hint);
+  modal.appendChild(body);
+
+  const actions = el('div', { className: 'tile-editor__actions' });
+  const cancelButton = createActionButton({
+    text: 'Cancel',
+    onClick: closeTileEditor
+  });
+  const saveButton = createActionButton({
+    text: 'Save description',
+    variant: 'primary',
+    onClick: handleTileEditorSave
+  });
+  actions.append(cancelButton, saveButton);
+  modal.appendChild(actions);
+
+  tileEditorOverlay.appendChild(modal);
+  requestAnimationFrame(() => {
+    const firstField = tileEditorOverlay.querySelector('.tile-editor__field input, .tile-editor__field textarea');
+    firstField?.focus();
+  });
+}
+
+function buildTileEditorField({ label, inputType, value, placeholder, onInput }) {
+  const wrapper = el('label', { className: 'tile-editor__field' });
+  const caption = el('span', { className: 'tile-editor__field-label', text: label });
+  let control;
+  if (inputType === 'textarea') {
+    control = document.createElement('textarea');
+    control.rows = 4;
+  } else {
+    control = document.createElement('input');
+    control.type = 'text';
+  }
+  control.value = value ?? '';
+  if (placeholder) control.placeholder = placeholder;
+  control.addEventListener('input', (event) => {
+    onInput?.(event.target.value);
+  });
+  wrapper.append(caption, control);
+  return wrapper;
+}
+
+function handleTileEditorSave() {
+  const state = appState.tileEditorState;
+  if (state.dayIndex === null || state.slotIndex === null) {
+    closeTileEditor();
+    return;
+  }
+  const formDay = ensureFormDay(state.dayIndex);
+  const meal = ensureFormMeal(state.dayIndex, state.slotIndex, 'text');
+  const nextTitle = state.title?.trim() || meal.title || `Day ${state.dayIndex + 1} meal ${state.slotIndex + 1}`;
+  meal.title = nextTitle;
+  meal.type = 'text';
+  meal.text = state.description?.trim() || '';
+  meal.caption = '';
+  meal.file = null;
+  meal.fileMimeType = '';
+  meal.fileDataUrl = '';
+  meal.fileBase64 = '';
+  if (state.mealId) {
+    meal.id = state.mealId;
+  }
+  if (!meal.lastBreakdown) {
+    meal.lastBreakdown = createDefaultBreakdownSummary();
+  }
+  if (!meal.lastBreakdown.summary && meal.text) {
+    meal.lastBreakdown.summary = 'Description saved. Re-run “Build Dashboard Data” to grade this meal.';
+  }
+
+  formDay.meals[state.slotIndex] = meal;
+  syncFormMealToDashboard(state.dayIndex, state.slotIndex, { allowCreate: true });
+  if (appState.isUploaderOpen) {
+    renderUploader();
+  }
+  closeTileEditor();
 }
 
 function renderApiKeyManager() {
@@ -1355,8 +1705,8 @@ function renderUploaderDays() {
     dayCard.appendChild(header);
 
     const mealsContainer = el('div', { className: 'uploader-meals' });
-    day.meals.forEach((meal) => {
-      mealsContainer.appendChild(renderMealEditor(day, meal));
+    day.meals.forEach((meal, mealIndex) => {
+      mealsContainer.appendChild(renderMealEditor(day, meal, index, mealIndex));
     });
 
     if (!day.meals.length) {
@@ -1387,7 +1737,7 @@ function renderUploaderDays() {
   return section;
 }
 
-function renderMealEditor(day, meal) {
+function renderMealEditor(day, meal, dayIndex, mealIndex) {
   const mealCard = el('article', {
     className: 'uploader-meal',
     attrs: { 'data-meal-id': meal.id }
@@ -1402,6 +1752,7 @@ function renderMealEditor(day, meal) {
       disabled: appState.isGenerating,
       onInput: (value) => {
         meal.title = value;
+        syncFormMealToDashboard(dayIndex, mealIndex, { silent: true });
       }
     })
   );
@@ -1505,12 +1856,41 @@ function renderMealEditor(day, meal) {
   }
 
   if (meal.lastBreakdown) {
-    mealCard.appendChild(
+    const breakdownEditor = el('div', { className: 'uploader-breakdown-editor' });
+    breakdownEditor.appendChild(
       el('p', {
         className: 'uploader-note',
         text: `Latest breakdown · Veg & Fruit ${meal.lastBreakdown.vegFruit}% · Healthy Carbs ${meal.lastBreakdown.healthyCarbs}% · Protein ${meal.lastBreakdown.protein}% · Pause Food ${meal.lastBreakdown.pauseFood}%`
       })
     );
+
+    breakdownEditor.appendChild(
+      renderTextAreaField({
+        label: 'Summary shown on the dashboard',
+        placeholder: 'Edit the reasoning copy…',
+        value: meal.lastBreakdown.summary,
+        disabled: appState.isGenerating,
+        onInput: (value) => {
+          meal.lastBreakdown.summary = value;
+          syncFormMealToDashboard(dayIndex, mealIndex, { silent: true });
+        }
+      })
+    );
+
+    breakdownEditor.appendChild(
+      renderTextAreaField({
+        label: 'Adjustment tip (optional)',
+        placeholder: 'Add or tweak the action step…',
+        value: meal.lastBreakdown.adjustmentTips,
+        disabled: appState.isGenerating,
+        onInput: (value) => {
+          meal.lastBreakdown.adjustmentTips = value;
+          syncFormMealToDashboard(dayIndex, mealIndex, { silent: true });
+        }
+      })
+    );
+
+    mealCard.appendChild(breakdownEditor);
   }
 
   return mealCard;
@@ -1884,6 +2264,9 @@ async function callPictureGeneration(apiKey, meal, breakdown) {
 }
 
 function buildGeneratedMeal(mealState) {
+  const breakdown = mealState.lastBreakdown
+    ? structuredClone(mealState.lastBreakdown)
+    : createDefaultBreakdownSummary();
   return {
     id: mealState.id,
     title: mealState.title || 'Meal',
@@ -1893,7 +2276,7 @@ function buildGeneratedMeal(mealState) {
         : mealState.fileDataUrl
           ? { type: 'inline-image', dataUrl: mealState.fileDataUrl }
           : { type: 'text', value: mealState.text },
-    breakdown: mealState.lastBreakdown,
+    breakdown,
     generatedImageDataUrl: mealState.generatedImageDataUrl || mealState.fileDataUrl || ''
   };
 }
@@ -1994,6 +2377,7 @@ async function runGeneration() {
 
     setGenerationStatus('Dashboard updated. Scroll up to preview!', 1);
     renderDashboard();
+    syncFormDataFromDashboard();
   } catch (error) {
     console.error('Dashboard generation failed', error);
     alert(`Generation failed: ${error.message}`);

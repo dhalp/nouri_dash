@@ -58,6 +58,10 @@ body.print-mode .uploader-overlay {
   display: none !important;
 }
 
+body.print-mode .tile-editor-overlay {
+  display: none !important;
+}
+
 body.print-mode .meal-card__drop-overlay {
   display: none !important;
 }
@@ -494,6 +498,94 @@ body.print-mode .meal-card__drop-overlay {
   display: flex;
 }
 
+.tile-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1200;
+}
+
+.tile-editor-overlay.is-open {
+  display: flex;
+}
+
+.tile-editor {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow:
+    0 25px 40px rgba(0, 0, 0, 0.18),
+    0 4px 18px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tile-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tile-editor__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: 'Work Sans', sans-serif;
+}
+
+.tile-editor__close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.tile-editor__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tile-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.tile-editor__field input,
+.tile-editor__field textarea {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  width: 100%;
+  resize: vertical;
+}
+
+.tile-editor__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.tile-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .print-mode-hint {
   position: fixed;
   right: 24px;
@@ -780,6 +872,12 @@ body.print-mode .meal-card__drop-overlay {
   font-size: 14px;
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.uploader-breakdown-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .uploader-status {
