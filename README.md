@@ -105,6 +105,12 @@ npm run test:export
 
 This script renders `data/dashboard-sample.json`, saves `dist/sample-dashboard.pdf`, and verifies that the stacked header, legend, and all seven day columns fit within the printable body height. Open the generated file to spot-check typography or share it with reviewers without booting the browser.
 
+To validate the Responses API payloads we send for image generation (both text-only and photo-referenced meals), run:
+
+```bash
+npm run test:image
+```
+
 ### Drag-and-drop grading
 
 With the dev server running, you can drag a meal photo from your desktop straight onto any of the square meal tiles in the dashboard. The tile will show a spinner while the image is sent through the same OpenAI Responses API prompt that powers the wizard; once grading completes the photo stays in place, the Always/Fuel/Pause bars update, and that day's donut reflects the new percentages. Use the dedicated **OpenAI API Key** card (inside the wizard) to save your key once so drag-and-drop grading has credentials, and use **Download JSON** if you want to persist the graded meals.
@@ -130,6 +136,6 @@ npm run preview
 
 - **404 on `/data/dashboard-data.json`** – Run the generator; until then the UI falls back to placeholder data.
 - **Export button fails** – Ensure all images resolve (hosted locally via Vite) and try again; console logs include failure details.
-- **API errors** – Double-check `OPENAI_API_KEY` and that the account has access to the Responses endpoints used (`gpt-4.1-mini`).
+- **API errors** – Double-check `OPENAI_API_KEY` and that the account has access to the Responses endpoints used (`gpt-4.1-mini` for breakdowns and `gpt-4o` for image generation).
 
 Feel free to customize fonts, iconography, or layout variables in `src/style.css` to further match bespoke branding while keeping the prompt-driven workflow intact.

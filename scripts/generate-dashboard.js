@@ -67,6 +67,140 @@ function buildDataUrl(base64, mimeType = 'image/png') {
   return `data:${mimeType};base64,${base64}`;
 }
 
+function parseDataUrl(dataUrl, fallback = 'image/png') {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null;
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return null;
+  const meta = dataUrl.slice(5, commaIndex);
+  if (!/;base64/i.test(meta)) return null;
+  const mimeType = meta.split(';')[0] || fallback;
+  const base64 = dataUrl.slice(commaIndex + 1).trim();
+  if (!base64) return null;
+  return { mimeType, base64 };
+}
+
+function normalizeImageMimeType(hint, fallback = 'image/png') {
+  if (!hint) return fallback;
+  const normalized = String(hint).trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized.startsWith('image/')) return normalized;
+  switch (normalized) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'bmp':
+      return 'image/bmp';
+    default:
+      return fallback;
+  }
+}
+
+function coerceBase64ImageCandidate(candidate, mimeType) {
+  if (typeof candidate !== 'string') return null;
+  const trimmed = candidate.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('data:')) {
+    const parsed = parseDataUrl(trimmed, mimeType);
+    if (parsed?.base64) {
+      return parsed;
+    }
+    return null;
+  }
+  return { base64: trimmed, mimeType };
+}
+
+function coerceImageUrlCandidate(candidate, mimeType) {
+  if (!candidate) return null;
+  let url = null;
+  if (typeof candidate === 'string') {
+    url = candidate.trim();
+  } else if (typeof candidate === 'object') {
+    url = typeof candidate.url === 'string' ? candidate.url : typeof candidate.href === 'string' ? candidate.href : null;
+    if (typeof url === 'string') {
+      url = url.trim();
+    }
+  }
+  if (!url) return null;
+  if (url.startsWith('data:')) {
+    const parsed = parseDataUrl(url, mimeType);
+    if (parsed?.base64) {
+      return parsed;
+    }
+    return null;
+  }
+  return { url, mimeType };
+}
+
+function extractImageFromDescriptor(descriptor, fallbackMimeType = 'image/png') {
+  if (!descriptor) return null;
+  const mimeType = normalizeImageMimeType(
+    descriptor.mimeType ??
+      descriptor.mime_type ??
+      descriptor.image?.mimeType ??
+      descriptor.image?.mime_type ??
+      descriptor.output_format ??
+      descriptor.format ??
+      fallbackMimeType
+  );
+
+  const base64Candidates = [
+    descriptor.result,
+    descriptor.base64,
+    descriptor.image_base64,
+    descriptor.b64_json,
+    descriptor.data,
+    descriptor.image?.base64,
+    descriptor.image?.b64_json,
+    descriptor.image?.data
+  ];
+  for (const candidate of base64Candidates) {
+    const extracted = coerceBase64ImageCandidate(candidate, mimeType);
+    if (extracted) return extracted;
+  }
+
+  const urlCandidates = [descriptor.image_url, descriptor.url, descriptor.image?.url];
+  for (const candidate of urlCandidates) {
+    const extracted = coerceImageUrlCandidate(candidate, mimeType);
+    if (extracted) return extracted;
+  }
+
+  const nestedImages = Array.isArray(descriptor.images) ? descriptor.images : [];
+  for (const nested of nestedImages) {
+    if (typeof nested === 'string') {
+      const extracted = coerceBase64ImageCandidate(nested, mimeType);
+      if (extracted) return extracted;
+      continue;
+    }
+    const extracted = extractImageFromDescriptor(nested, mimeType);
+    if (extracted) return extracted;
+  }
+  return null;
+}
+
+async function fetchImageUrlAsBase64(url, fallbackMimeType = 'image/png') {
+  if (!url) return null;
+  const headers = {};
+  if (url.startsWith('https://api.openai.com')) {
+    headers.Authorization = `Bearer ${process.env.OPENAI_API_KEY}`;
+  }
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`Image download failed (HTTP ${response.status})`);
+  }
+  const mimeType = response.headers.get('content-type') || fallbackMimeType;
+  const buffer = await response.arrayBuffer();
+  return {
+    base64: Buffer.from(buffer).toString('base64'),
+    mimeType
+  };
+}
+
 function extractJsonSchemaOutput(response) {
   if (!response) return null;
   const outputs = Array.isArray(response.output) ? response.output : [];
@@ -108,6 +242,27 @@ function extractJsonSchemaOutput(response) {
       return JSON.parse(response.output_text);
     } catch (error) {
       console.warn('Unable to parse output_text string as JSON', error);
+    }
+  }
+  return null;
+}
+
+function extractImageFromResponse(result) {
+  const outputs = Array.isArray(result?.output) ? result.output : [];
+  for (const item of outputs) {
+    if (item?.type === 'image_generation_call') {
+      const generated = extractImageFromDescriptor(item);
+      if (generated) return generated;
+    }
+    const contents = Array.isArray(item?.content)
+      ? item.content
+      : Array.isArray(item?.contents)
+        ? item.contents
+        : [];
+    for (const content of contents) {
+      if (content?.type !== 'output_image') continue;
+      const extracted = extractImageFromDescriptor(content);
+      if (extracted) return extracted;
     }
   }
   return null;
@@ -263,16 +418,16 @@ async function callPictureGeneration(openai, meal, breakdown) {
     }
   ];
 
-  if (imagePayload) {
+  if (imagePayload?.data) {
     userContent.push({
       type: 'input_image',
+      detail: 'high',
       image_url: buildDataUrl(imagePayload.data, imagePayload.mimeType)
     });
   }
 
   const response = await openai.responses.create({
-    model: 'gpt-4.1-mini',
-    modalities: ['text', 'image'],
+    model: 'gpt-4o',
     input: [
       {
         role: 'system',
@@ -288,23 +443,32 @@ async function callPictureGeneration(openai, meal, breakdown) {
         role: 'user',
         content: userContent
       }
+    ],
+    tool_choice: { type: 'image_generation' },
+    tools: [
+      {
+        type: 'image_generation',
+        model: 'gpt-image-1',
+        output_format: 'png',
+        quality: 'low',
+        background: 'auto',
+        size: '1024x1536'
+      }
     ]
   });
 
-  for (const item of response.output ?? []) {
-    if (!item.content) continue;
-    for (const content of item.content) {
-      if (content.type === 'output_image') {
-        const imageData =
-          content.image?.base64 ?? content.image_base64 ?? content.image?.data ?? null;
-        if (imageData) {
-          return imageData;
-        }
-      }
-    }
+  const image = extractImageFromResponse(response);
+  if (!image) {
+    throw new Error(`No image generated for meal ${meal.id}`);
   }
-
-  throw new Error(`No image generated for meal ${meal.id}`);
+  if (image.url && !image.base64) {
+    const downloaded = await fetchImageUrlAsBase64(image.url, image.mimeType);
+    if (!downloaded) {
+      throw new Error(`Image download failed for meal ${meal.id}`);
+    }
+    return downloaded;
+  }
+  return image;
 }
 
 function aggregateDay(day) {
@@ -332,7 +496,10 @@ async function saveImage(base64, targetPath) {
 
 async function main() {
   ensureEnv();
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    defaultHeaders: { 'OpenAI-Beta': 'assistants=v2' }
+  });
 
   const rawInput = await readFile(INPUT_PATH, 'utf-8');
   const config = JSON.parse(rawInput);
@@ -353,14 +520,14 @@ async function main() {
       let generatedImageFile = null;
       if (config.generateImages !== false) {
         console.log(`Generating styled plate image for ${meal.title ?? meal.id}...`);
-        const base64 = await callPictureGeneration(openai, meal, breakdown);
+        const generated = await callPictureGeneration(openai, meal, breakdown);
         const slug = `${meal.id ?? `${day.label ?? 'day'}-${enrichedMeals.length + 1}`}`
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, '');
         const filename = `${slug || `meal-${Date.now()}`}.png`;
         const outPath = path.join(GENERATED_DIR, filename);
-        await saveImage(base64, outPath);
+        await saveImage(generated.base64, outPath);
         generatedImageFile = path.relative(path.join(ROOT_DIR, 'public'), outPath);
       }
 
@@ -391,7 +558,20 @@ async function main() {
   console.log(`Dashboard data saved to ${path.relative(ROOT_DIR, OUTPUT_DATA_PATH)}`);
 }
 
-main().catch((error) => {
-  console.error('Failed to generate dashboard:', error);
-  process.exitCode = 1;
-});
+const isDirectExecution =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    console.error('Failed to generate dashboard:', error);
+    process.exitCode = 1;
+  });
+}
+
+export {
+  buildPicturePrompt,
+  callMealBreakdown,
+  callPictureGeneration,
+  buildUserContent,
+  encodeImage
+};
