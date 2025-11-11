@@ -97,6 +97,40 @@ const PRINT_HINT_COPY = {
   }
 };
 
+const PROMPT_STORAGE_KEY = 'emily-dashboard:prompt-overrides';
+
+const PROMPT_METADATA = [
+  {
+    id: 'meal-breakdown',
+    label: 'Meal Breakdown prompt',
+    defaultValue: MEAL_BREAKDOWN_PROMPT,
+    usage:
+      'Sent as the system instruction when GPT-4.1 mini classifies a meal into Veg & Fruit, Healthy Carbs, Protein, and Pause Food inside callMealBreakdown.',
+    dynamicContext: [
+      'Title line built from the meal tile or uploaded filename (formatted as “Title: …”).',
+      'Either the typed kid meal description or a notice that a meal photo is attached, plus any supplied caption.',
+      'Response must satisfy `mealBreakdownSchema` with vegFruit, healthyCarbs, protein, pauseFood, summary, and adjustmentTips fields.'
+    ]
+  },
+  {
+    id: 'picture-generation',
+    label: 'Picture Generation prompt',
+    defaultValue: PICTURE_GENERATION_PROMPT,
+    usage:
+      'Prepended to the art direction we send as user content when GPT-4.1 mini generates stylized meal imagery inside callPictureGeneration.',
+    dynamicContext: [
+      'Meal title injected as “Meal title: …” using the tile name or fallback.',
+      'Background guidance that switches to green, yellow/orange, or light red based on the Pause Food percentage.',
+      'Macro breakdown appended as Veg & Fruit %, Healthy Carbs %, Protein %, and Pause Food % plus any typed or captioned notes.'
+    ]
+  }
+];
+
+const PROMPT_METADATA_BY_ID = PROMPT_METADATA.reduce((acc, entry) => {
+  acc[entry.id] = entry;
+  return acc;
+}, {});
+
 const mealBreakdownSchema = {
   name: 'meal_breakdown',
   schema: {
@@ -132,11 +166,15 @@ const appState = {
   isApiKeyVisible: false,
   viewMode: VIEW_MODES.interactive,
   isPrintCardExporting: false,
-  tileEditorState: createInitialTileEditorState()
+  tileEditorState: createInitialTileEditorState(),
+  promptOverrides: {},
+  promptEditorState: null
 };
 
 const uploaderOverlay = createUploaderOverlay();
 const tileEditorOverlay = createTileEditorOverlay();
+const promptEditorOverlay = createPromptEditorOverlay();
+appState.promptEditorState = createInitialPromptEditorState();
 let printModeHintTitleEl = null;
 let printModeHintBodyEl = null;
 let printModeHintResetTimer = null;
@@ -312,6 +350,23 @@ function createInitialTileEditorState() {
   };
 }
 
+function createPromptEditorDrafts() {
+  return PROMPT_METADATA.reduce((acc, entry) => {
+    acc[entry.id] = getActivePrompt(entry.id);
+    return acc;
+  }, {});
+}
+
+function createInitialPromptEditorState() {
+  return {
+    isOpen: false,
+    drafts: createPromptEditorDrafts(),
+    returnFocus: null,
+    storageAvailable: Boolean(getLocalStorage()),
+    errorMessage: ''
+  };
+}
+
 function extractBase64FromDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') return '';
   const parts = dataUrl.split(',');
@@ -433,6 +488,233 @@ function createTileEditorOverlay() {
   });
   document.body.appendChild(overlay);
   return overlay;
+}
+
+function createPromptEditorOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'prompt-editor-overlay';
+  overlay.className = 'prompt-editor-overlay';
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closePromptEditor();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && appState.promptEditorState.isOpen) {
+      closePromptEditor();
+    }
+  });
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function openPromptEditor(focusTarget = null) {
+  if (appState.promptEditorState.isOpen) return;
+  const activeElement = focusTarget || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  appState.promptEditorState = {
+    ...createInitialPromptEditorState(),
+    isOpen: true,
+    drafts: createPromptEditorDrafts(),
+    returnFocus: activeElement,
+    storageAvailable: Boolean(getLocalStorage()),
+    errorMessage: ''
+  };
+  renderPromptEditor();
+  requestAnimationFrame(() => {
+    const firstField = promptEditorOverlay.querySelector('.prompt-editor__textarea');
+    if (firstField) {
+      firstField.focus();
+      const length = firstField.value.length;
+      firstField.setSelectionRange(length, length);
+    }
+  });
+}
+
+function closePromptEditor() {
+  const { returnFocus } = appState.promptEditorState;
+  appState.promptEditorState = createInitialPromptEditorState();
+  renderPromptEditor();
+  if (returnFocus && typeof returnFocus.focus === 'function') {
+    requestAnimationFrame(() => {
+      returnFocus.focus();
+    });
+  }
+}
+
+function handlePromptEditorReset() {
+  appState.promptOverrides = {};
+  const result = persistPromptOverrides(appState.promptOverrides);
+  if (result !== 'success') {
+    alert('Browser storage is unavailable, so defaults will only last for this session.');
+  }
+  appState.promptEditorState.drafts = createPromptEditorDrafts();
+  appState.promptEditorState.errorMessage = '';
+  appState.promptEditorState.storageAvailable = result === 'success';
+  renderPromptEditor();
+  if (appState.isUploaderOpen) {
+    renderUploader();
+  }
+}
+
+function handlePromptEditorSave() {
+  const drafts = appState.promptEditorState.drafts ?? {};
+  const missing = PROMPT_METADATA.find((entry) => !drafts[entry.id] || !drafts[entry.id].trim());
+  if (missing) {
+    appState.promptEditorState.errorMessage = `${missing.label} must include text. Use Reset to defaults if you need the original copy.`;
+    renderPromptEditor();
+    return;
+  }
+
+  const overrides = {};
+  PROMPT_METADATA.forEach((entry) => {
+    const value = drafts[entry.id];
+    if (typeof value === 'string' && value.length > 0 && value !== entry.defaultValue) {
+      overrides[entry.id] = value;
+    }
+  });
+
+  appState.promptOverrides = overrides;
+  const result = persistPromptOverrides(overrides);
+  if (result !== 'success') {
+    alert('Browser storage is unavailable, so prompt changes will reset after you refresh. They will still apply for this session.');
+  }
+  closePromptEditor();
+  if (appState.isUploaderOpen) {
+    renderUploader();
+  }
+}
+
+function renderPromptEditor() {
+  const state = appState.promptEditorState;
+  promptEditorOverlay.classList.toggle('is-open', state.isOpen);
+  if (!state.isOpen) {
+    promptEditorOverlay.innerHTML = '';
+    return;
+  }
+
+  promptEditorOverlay.innerHTML = '';
+  const modal = el('div', {
+    className: 'prompt-editor',
+    attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'prompt-editor-title' }
+  });
+
+  const header = el('div', { className: 'prompt-editor__header' });
+  header.appendChild(
+    el('h2', {
+      className: 'prompt-editor__title',
+      text: 'Customize prompts',
+      attrs: { id: 'prompt-editor-title' }
+    })
+  );
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'prompt-editor__close';
+  closeButton.innerHTML = '&times;';
+  closeButton.setAttribute('aria-label', 'Close prompt editor');
+  closeButton.addEventListener('click', () => {
+    closePromptEditor();
+  });
+  header.appendChild(closeButton);
+  modal.appendChild(header);
+
+  const body = el('div', { className: 'prompt-editor__body' });
+  body.appendChild(
+    el('p', {
+      className: 'prompt-editor__intro',
+      text:
+        'These base prompts steer OpenAI when grading meals and creating stylized tiles. Edits apply immediately to new generations.'
+    })
+  );
+
+  let errorMessageEl = null;
+
+  PROMPT_METADATA.forEach((entry) => {
+    const section = el('section', { className: 'prompt-editor__section' });
+    section.appendChild(
+      el('h3', {
+        className: 'prompt-editor__section-title',
+        text: entry.label
+      })
+    );
+    section.appendChild(
+      el('p', {
+        className: 'prompt-editor__section-usage',
+        text: entry.usage
+      })
+    );
+
+    if (entry.dynamicContext?.length) {
+      const list = el('ul', { className: 'prompt-editor__dynamic-list' });
+      entry.dynamicContext.forEach((item) => {
+        list.appendChild(el('li', { text: item }));
+      });
+      section.appendChild(list);
+    }
+
+    const field = el('label', { className: 'prompt-editor__field' });
+    field.appendChild(
+      el('span', {
+        className: 'prompt-editor__field-label',
+        text: 'Prompt text'
+      })
+    );
+    const textarea = document.createElement('textarea');
+    textarea.className = 'prompt-editor__textarea';
+    textarea.rows = 12;
+    textarea.value = state.drafts?.[entry.id] ?? getActivePrompt(entry.id);
+    textarea.addEventListener('input', (event) => {
+      appState.promptEditorState.drafts[entry.id] = event.target.value;
+      if (appState.promptEditorState.errorMessage) {
+        appState.promptEditorState.errorMessage = '';
+        if (errorMessageEl) {
+          errorMessageEl.textContent = '';
+          errorMessageEl.setAttribute('hidden', 'true');
+        }
+      }
+    });
+    field.appendChild(textarea);
+    section.appendChild(field);
+    body.appendChild(section);
+  });
+
+  body.appendChild(
+    el('p', {
+      className: 'prompt-editor__note',
+      text: state.storageAvailable
+        ? 'Saved prompts live in this browser only. Share updates by exporting JSON or copying the text below.'
+        : 'Browser storage is disabled, so prompts will reset after you refresh. Copy them elsewhere to keep a backup.'
+    })
+  );
+  modal.appendChild(body);
+
+  errorMessageEl = el('p', {
+    className: 'prompt-editor__error',
+    text: state.errorMessage ?? '',
+    attrs: { role: 'alert' }
+  });
+  if (!state.errorMessage) {
+    errorMessageEl.setAttribute('hidden', 'true');
+  }
+  modal.appendChild(errorMessageEl);
+
+  const actions = el('div', { className: 'prompt-editor__actions' });
+  const cancelButton = createActionButton({
+    text: 'Cancel',
+    onClick: () => closePromptEditor()
+  });
+  const resetButton = createActionButton({
+    text: 'Reset to defaults',
+    onClick: handlePromptEditorReset
+  });
+  const saveButton = createActionButton({
+    text: 'Save changes',
+    variant: 'primary',
+    onClick: handlePromptEditorSave
+  });
+  actions.append(cancelButton, resetButton, saveButton);
+  modal.appendChild(actions);
+
+  promptEditorOverlay.appendChild(modal);
 }
 
 function createPrintModeHint() {
@@ -646,6 +928,59 @@ function persistApiKey(value) {
     }
   } catch (error) {
     console.warn('Unable to persist API key', error);
+  }
+}
+
+function getPromptMetadata(id) {
+  return PROMPT_METADATA_BY_ID[id] ?? null;
+}
+
+function getPromptDefaultValue(id) {
+  return getPromptMetadata(id)?.defaultValue ?? '';
+}
+
+function getActivePrompt(id) {
+  const override = appState.promptOverrides?.[id];
+  if (typeof override === 'string' && override.length > 0) {
+    return override;
+  }
+  return getPromptDefaultValue(id);
+}
+
+function restorePromptOverrides() {
+  const storage = getLocalStorage();
+  if (!storage) return;
+  try {
+    const raw = storage.getItem(PROMPT_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    const normalized = {};
+    PROMPT_METADATA.forEach((entry) => {
+      const value = parsed[entry.id];
+      if (typeof value === 'string' && value.length > 0 && value !== entry.defaultValue) {
+        normalized[entry.id] = value;
+      }
+    });
+    appState.promptOverrides = normalized;
+  } catch (error) {
+    console.warn('Unable to restore prompt overrides', error);
+  }
+}
+
+function persistPromptOverrides(overrides) {
+  const storage = getLocalStorage();
+  if (!storage) return 'unavailable';
+  try {
+    if (overrides && Object.keys(overrides).length) {
+      storage.setItem(PROMPT_STORAGE_KEY, JSON.stringify(overrides));
+    } else {
+      storage.removeItem(PROMPT_STORAGE_KEY);
+    }
+    return 'success';
+  } catch (error) {
+    console.warn('Unable to persist prompt overrides', error);
+    return 'error';
   }
 }
 
@@ -1287,8 +1622,11 @@ function renderDashboard() {
       text: 'Open Data Wizard',
       onClick: () => openUploader()
     });
+    const promptButton = createActionButton({ text: 'Edit prompts' });
+    promptButton.addEventListener('click', () => openPromptEditor(promptButton));
     actions.append(
       uploaderButton,
+      promptButton,
       createDownloadDataButton(),
       createPrintLayoutButton()
     );
@@ -1766,6 +2104,7 @@ function renderUploaderInstructions() {
     html:
       'Each meal runs through the provided <strong>Meal Breakdown</strong> prompt to capture percentages and narrative guidance. ' +
       'When “Generate stylized meal pictures” is enabled, the wizard also uses the <strong>Picture Generation</strong> prompt so every tile matches the reference look. ' +
+      'Use the <strong>Edit prompts</strong> button near the dashboard header to adjust the base instructions and review the dynamic lines the app adds (titles, captions, macro percentages). ' +
       'Add photos or descriptions below and press “Build Dashboard Data” to populate the board automatically.'
   });
   section.appendChild(note);
@@ -2258,7 +2597,9 @@ function buildPicturePrompt({ meal, breakdown }) {
       ? meal.source.value
       : meal.source.caption ?? 'Use the attached meal photo as inspiration.';
 
-  return `${PICTURE_GENERATION_PROMPT}
+  const basePrompt = getActivePrompt('picture-generation');
+
+  return `${basePrompt}
 
 Meal title: ${meal.title ?? 'Meal'}
 ${backgroundGuide}
@@ -2272,6 +2613,8 @@ async function callMealBreakdown(apiKey, meal) {
     meal.source.type === 'image'
       ? { data: meal.source.base64, mimeType: meal.source.mimeType }
       : null;
+
+  const mealBreakdownPrompt = getActivePrompt('meal-breakdown');
 
   const userContent = buildUserContent({
     title: meal.title,
@@ -2297,7 +2640,7 @@ async function callMealBreakdown(apiKey, meal) {
       input: [
         {
           role: 'system',
-          content: [{ type: 'input_text', text: MEAL_BREAKDOWN_PROMPT }]
+          content: [{ type: 'input_text', text: mealBreakdownPrompt }]
         },
         {
           role: 'user',
@@ -2535,6 +2878,9 @@ async function runGeneration() {
 async function init() {
   await loadDashboardData();
   restoreSavedApiKey();
+  restorePromptOverrides();
+  appState.promptEditorState.drafts = createPromptEditorDrafts();
+  appState.promptEditorState.storageAvailable = Boolean(getLocalStorage());
   renderDashboard();
   renderUploader();
 }
