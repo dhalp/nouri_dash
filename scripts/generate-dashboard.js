@@ -398,6 +398,7 @@ function buildPicturePrompt({ meal, breakdown }) {
     meal.source.type === 'text'
       ? meal.source.value
       : meal.source.caption ?? 'Use the attached meal photo as inspiration.';
+  const breakdownOutput = JSON.stringify(breakdown, null, 2);
 
   return `${PICTURE_GENERATION_PROMPT}
 
@@ -405,6 +406,9 @@ Meal title: ${meal.title ?? 'Meal'}
 ${backgroundGuide}
 Include plate styling that references: Veg & Fruit ${breakdown.vegFruit}%, Healthy Carbs ${breakdown.healthyCarbs}%, Protein ${breakdown.protein}%, Pause Food ${breakdown.pauseFood}%.
 Core meal notes: ${description}
+
+Breakdown prompt output (JSON):
+${breakdownOutput}
 `;
 }
 
