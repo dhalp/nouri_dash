@@ -1592,7 +1592,8 @@ function handleTileEditorSave() {
   const nextTitle = state.title?.trim() || meal.title || `Day ${state.dayIndex + 1} meal ${state.slotIndex + 1}`;
   meal.title = nextTitle;
   meal.type = 'text';
-  meal.text = state.description?.trim() || '';
+  const description = state.description?.trim() || '';
+  meal.text = description;
   meal.caption = '';
   meal.file = null;
   meal.fileMimeType = '';
@@ -1604,9 +1605,7 @@ function handleTileEditorSave() {
   if (!meal.lastBreakdown) {
     meal.lastBreakdown = createDefaultBreakdownSummary();
   }
-  if (!meal.lastBreakdown.summary && meal.text) {
-    meal.lastBreakdown.summary = 'Description saved. Re-run “Build Dashboard Data” to grade this meal.';
-  }
+  meal.lastBreakdown.summary = description;
 
   const editorBreakdown = state.breakdown || createBreakdownPercentages();
   CATEGORY_KEYS.forEach(({ key }) => {
@@ -2014,6 +2013,9 @@ function renderMealEditor(day, meal, dayIndex, mealIndex) {
         disabled: appState.isGenerating,
         onInput: (value) => {
           meal.lastBreakdown.summary = value;
+          if (meal.type === 'text') {
+            meal.text = value;
+          }
           syncFormMealToDashboard(dayIndex, mealIndex, { silent: true });
         }
       })
