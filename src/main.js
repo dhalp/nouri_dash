@@ -78,6 +78,10 @@ const VIEW_MODES = {
   print: 'print'
 };
 
+const CLIENT_INPUT_MIN_WIDTH = 4;
+const CLIENT_INPUT_MAX_WIDTH = 640;
+const CLIENT_INPUT_SIZE_BUFFER = 2;
+
 const PRINT_HINT_COPY = {
   idle: {
     title: 'Print layout ready.',
@@ -810,10 +814,48 @@ function applyPalette(palette) {
   });
 }
 
+function getEffectiveClientName(rawName) {
+  const trimmed = rawName?.trim();
+  return trimmed || DEFAULT_DATA.clientName;
+}
+
+function getClientSuffix(name) {
+  if (!name) return `'s`;
+  return /s$/i.test(name) ? `'` : `'s`;
+}
+
 function formatTitle(clientName, weekLabel) {
-  const sanitized = clientName?.trim() || 'Maria';
-  const trailingApostrophe = sanitized.endsWith('s') || sanitized.endsWith('S') ? `'` : `'s`;
-  return [`${sanitized}${trailingApostrophe}`, weekLabel || 'tracked meals'];
+  const effectiveClientName = getEffectiveClientName(clientName);
+  const suffix = getClientSuffix(effectiveClientName);
+  const label = weekLabel?.trim() || DEFAULT_DATA.weekLabel;
+  return {
+    clientName: effectiveClientName,
+    suffix,
+    weekLabel: label
+  };
+}
+
+function autoSizeClientNameInput(input, sizer) {
+  if (!input) return;
+  if (!input.isConnected) {
+    requestAnimationFrame(() => autoSizeClientNameInput(input, sizer));
+    return;
+  }
+  const style = getComputedStyle(input);
+  const fontSize = parseFloat(style.fontSize) || 16;
+  const minWidth = Math.max(CLIENT_INPUT_MIN_WIDTH, fontSize * 0.2);
+  const maxWidth = Math.max(minWidth, CLIENT_INPUT_MAX_WIDTH);
+  const measureText = input.value || input.placeholder || '';
+  if (sizer) {
+    sizer.textContent = measureText || '\u00a0';
+    const measured = sizer.getBoundingClientRect().width;
+    const width = Math.min(maxWidth, Math.max(minWidth, measured + CLIENT_INPUT_SIZE_BUFFER));
+    input.style.width = `${width}px`;
+    return;
+  }
+  const fallbackWidth = (measureText.length || 1) * fontSize * 0.6 + CLIENT_INPUT_SIZE_BUFFER;
+  const width = Math.min(maxWidth, Math.max(minWidth, fallbackWidth));
+  input.style.width = `${width}px`;
 }
 
 function buildDataUrl(base64, mimeType = 'image/png') {
@@ -1477,14 +1519,90 @@ function renderDashboard() {
   const app = document.querySelector('#app');
   app.innerHTML = '';
 
-  const [clientTitle, weekLabel] = formatTitle(data.clientName, data.weekLabel);
+  const titleMeta = formatTitle(data.clientName, data.weekLabel);
   const canvas = el('div', { className: 'dashboard-canvas' });
   const header = el('header', { className: 'dashboard-header' });
 
-  const titleBlock = el('div', { className: 'dashboard-title' }, [
-    el('span', { className: 'dashboard-title__client', text: clientTitle }),
-    el('span', { className: 'dashboard-title__label', text: weekLabel })
-  ]);
+  const titleBlock = el('div', { className: 'dashboard-title' });
+  if (isPrintMode) {
+    titleBlock.append(
+      el('span', {
+        className: 'dashboard-title__client',
+        text: `${titleMeta.clientName}${titleMeta.suffix}`
+      }),
+      el('span', { className: 'dashboard-title__label', text: titleMeta.weekLabel })
+    );
+  } else {
+    const clientInputId = 'dashboard-title-client-input';
+    const clientInputWrapper = el('label', {
+      className: 'dashboard-title__client-input-wrapper',
+      attrs: { for: clientInputId }
+    });
+    const clientInput = document.createElement('input');
+    clientInput.type = 'text';
+    clientInput.id = clientInputId;
+    clientInput.className = 'dashboard-title__client-input';
+    clientInput.placeholder = 'Client name';
+    clientInput.value = titleMeta.clientName;
+    clientInput.autocomplete = 'name';
+    clientInput.spellcheck = false;
+    clientInput.inputMode = 'text';
+    clientInput.setAttribute('aria-label', 'Client name');
+    const clientInputSizer = el('span', {
+      className: 'dashboard-title__client-input-sizer',
+      attrs: { 'aria-hidden': 'true' }
+    });
+    const suffixEl = el('span', {
+      className: 'dashboard-title__client-suffix',
+      text: titleMeta.suffix
+    });
+
+    const syncClientName = (rawValue, { commit = false } = {}) => {
+      const value = commit ? getEffectiveClientName(rawValue) : rawValue;
+      appState.formData.clientName = value;
+      appState.dashboardData.clientName = value;
+      const suffixSource = commit ? value : getEffectiveClientName(rawValue);
+      suffixEl.textContent = getClientSuffix(suffixSource);
+      if (commit) {
+        clientInput.value = value;
+      }
+      autoSizeClientNameInput(clientInput, clientInputSizer);
+    };
+
+    clientInput.addEventListener('input', (event) => {
+      syncClientName(event.target.value || '');
+    });
+
+    clientInput.addEventListener('blur', (event) => {
+      syncClientName(event.target.value || '', { commit: true });
+    });
+
+    clientInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+    });
+
+    clientInput.addEventListener('focus', (event) => {
+      event.target.select();
+      event.target.dataset.selectAll = 'true';
+    });
+
+    clientInput.addEventListener('mouseup', (event) => {
+      if (event.target.dataset.selectAll === 'true') {
+        event.preventDefault();
+        event.target.dataset.selectAll = 'false';
+      }
+    });
+
+    clientInputWrapper.append(clientInput, suffixEl, clientInputSizer);
+    autoSizeClientNameInput(clientInput, clientInputSizer);
+    titleBlock.append(
+      clientInputWrapper,
+      el('span', { className: 'dashboard-title__label', text: titleMeta.weekLabel })
+    );
+  }
 
   const effectivePalette = {
     vegFruit:
